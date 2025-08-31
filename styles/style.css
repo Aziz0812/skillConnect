@@ -1,0 +1,401 @@
+/* Reset and Base Styles */
+html {
+  scroll-behavior: smooth;
+}
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  font-family: 'Inter', sans-serif;
+  background: linear-gradient(to bottom right, #e0f7fa, #fce4ec);
+  color: #333;
+  line-height: 1.7;
+  font-size: 16px;
+  min-width: 320px; /* Ensures layout doesn't break on very small screens */
+  overflow-x: hidden;
+}
+
+/* Typography */
+h1, h2, h3 {
+  font-weight: 800;
+  line-height: 1.3;
+}
+
+p {
+  color: #555;
+}
+
+/* Navbar */
+.navbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 1rem 6rem;
+  background-color: #ffffff;
+  border-bottom: 1px solid #e0e0e0;
+  box-shadow: 0 2px 6px rgba(0,0,0,0.03);
+  position: sticky;
+  top: 0;
+  z-index: 1000;
+  flex-wrap: wrap;
+}
+
+.logo {
+  font-size: 1.75rem;
+  font-weight: 800;
+  color: #007bff;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  cursor: pointer;
+}
+
+.main-log {
+  max-height: 45px;
+}
+
+.signin {
+  text-decoration: none;
+  font-size: 1rem;
+  color: #333;
+  transition: color 0.3s ease;
+}
+
+.signin span {
+  color: #007bff;
+  font-weight: 600;
+}
+
+/* Hero Section */
+.hero {
+  padding: 5rem 2rem;
+  background: transparent;
+}
+
+.hero-content {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 3rem;
+  align-items: center;
+  justify-content: space-between;
+  max-width: 1200px;
+  margin: auto;
+}
+
+.hero-text {
+  flex: 1;
+  min-width: 280px;
+}
+
+.hero-text h1 {
+  font-size: 3rem;
+  margin-bottom: 1.2rem;
+  color: #222;
+}
+
+.hero-text p {
+  font-size: 1.1rem;
+  margin-bottom: 2rem;
+  color: #444;
+}
+
+.primary-btn {
+  background-color: #007bff;
+  color: white;
+  padding: 0.8rem 1.6rem;
+  border: none;
+  border-radius: 30px;
+  font-size: 1rem;
+  cursor: pointer;
+  transition: background-color 0.3s ease;
+}
+
+.primary-btn:hover {
+  background-color: #0056b3;
+}
+
+.learn-more a {
+  color: #007bff;
+  text-decoration: none;
+  font-size: 0.95rem;
+  display: inline-block;
+  margin-top: 1rem;
+  font-weight: 500;
+}
+
+/* Hero Image */
+.hero-image img {
+  max-width: 360px;
+  width: 100%;
+  height: auto;
+  border-radius: 10px;
+}
+
+/* Role Selection */
+.role-select {
+  padding: 5rem 2rem;
+  background-color: #ffffff;
+  text-align: center;
+  border-top: 1px solid #e0e0e0;
+  border-bottom: 1px solid #e0e0e0;
+}
+
+.role-select h2 {
+  font-size: 2.2rem;
+  margin-bottom: 0.75rem;
+}
+
+.role-select p {
+  margin-bottom: 2.5rem;
+  color: #555;
+  max-width: 600px;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+.role-options {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 2rem;
+}
+
+.role-card {
+  width: 280px;
+  background: #f9f9f9;
+  padding: 2rem;
+  border-radius: 15px;
+  border: 2px solid transparent;
+  box-shadow: 0 6px 12px rgba(0,0,0,0.04);
+  cursor: pointer;
+  transition: all 0.3s ease;
+  text-align: left;
+}
+
+.role-card:hover {
+  border-color: #007bff;
+  background-color: #eef6ff;
+  transform: translateY(-5px);
+}
+
+.role-card.active {
+  border-color: #007bff;
+  background-color: #e3f2fd;
+}
+
+.role-card h3 {
+  font-size: 1.25rem;
+  margin-bottom: 0.5rem;
+}
+
+.role-card p {
+  font-size: 0.95rem;
+  color: #666;
+}
+
+/* How It Works */
+.how-it-works {
+  padding: 5rem 2rem;
+  background-color: #f7f9fa;
+  text-align: center;
+}
+
+.to-top {
+  text-align: right;
+  cursor: pointer;
+  font-size: 0.9rem;
+  color: #007bff;
+  margin-bottom: 1rem;
+}
+
+.how-it-works h2 {
+  font-size: 2rem;
+  margin-bottom: 2rem;
+}
+
+.steps {
+  display: flex;
+  justify-content: center;
+  gap: 2rem;
+  flex-wrap: wrap;
+}
+
+.step {
+  background: white;
+  padding: 2rem;
+  border-radius: 12px;
+  width: 280px;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.05);
+  text-align: center;
+  transition: transform 0.2s ease;
+}
+
+.step:hover {
+  transform: translateY(-4px);
+}
+
+.step .icon {
+  font-size: 2rem;
+  margin-bottom: 1rem;
+  color: #007bff;
+}
+
+/* Categories */
+.categories {
+  padding: 5rem 2rem;
+  text-align: center;
+}
+
+.categories h2 {
+  font-size: 2rem;
+  margin-bottom: 2rem;
+}
+
+.category-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 1rem;
+  max-width: 800px;
+  margin: 0 auto;
+}
+
+.category-item {
+  background: white;
+  padding: 1rem 1.7rem;
+  border-radius: 30px;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+  font-weight: 600;
+  transition: transform 0.3s ease;
+  text-align: center;
+  color: #070707;
+  border: 1px solid #e0e0e0;
+}
+
+.category-item:hover {
+  transform: translateY(-10px);
+  background-color: #f0f8ff;
+}
+
+/* Footer */
+.footer {
+  padding: 2rem;
+  text-align: center;
+  background: #fff;
+  border-top: 1px solid #ddd;
+  font-size: 0.95rem;
+  color: #555;
+}
+
+.footer-links {
+  margin-top: 0.75rem;
+}
+
+.footer-links a {
+  margin: 0 0.75rem;
+  text-decoration: none;
+  color: #007bff;
+  font-weight: 500;
+  transition: color 0.2s ease;
+}
+
+.footer-links a:hover {
+  color: #0056b3;
+}
+
+/* New: Provider Cards */
+.provider-preview {
+  padding: 4rem 2rem;
+  background-color: #f9fbfc;
+  text-align: center;
+}
+
+.provider-preview h2 {
+  font-size: 2rem;
+  margin-bottom: 0.5rem;
+}
+
+.provider-preview p {
+  max-width: 700px;
+  margin: 0 auto 2rem;
+  font-size: 1rem;
+}
+
+.provider-cards {
+  display: flex;
+  gap: 2rem;
+  justify-content: center;
+  flex-wrap: wrap;
+}
+
+.provider-card {
+  width: 280px;
+  background: #ffffff;
+  padding: 1.5rem;
+  border-radius: 15px;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.05);
+  position: relative;
+  overflow: hidden;
+  text-align: left;
+}
+
+.provider-card img {
+  width: 60px;
+  height: 60px;
+  border-radius: 50%;
+  margin-bottom: 1rem;
+}
+
+.provider-card .blurred {
+  filter: blur(3px);
+  user-select: none;      
+-webkit-user-select: none; 
+-ms-user-select: none;
+}
+
+.provider-card .overlay {
+  position: absolute;
+  bottom: 1rem;
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(0, 123, 255, 0.9);
+  color: white;
+  padding: 0.5rem 1rem;
+  border-radius: 20px;
+  font-size: 0.85rem;
+  pointer-events: none;
+}
+
+/* Responsive Enhancements */
+@media (max-width: 600px) {
+  .hero-text h1 {
+    font-size: 2rem;
+  }
+
+  .hero-text p,
+  .role-card p,
+  .provider-preview p {
+    font-size: 0.95rem;
+  }
+
+  .primary-btn {
+    width: 100%;
+    text-align: center;
+  }
+
+  .hero-content,
+  .steps,
+  .provider-cards {
+    flex-direction: column;
+    align-items: center;
+  }
+
+  .navbar {
+    flex-direction: column;
+    gap: 1rem;
+    padding: 1rem;
+  }
+}

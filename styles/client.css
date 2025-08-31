@@ -1,0 +1,207 @@
+body {
+  font-family: 'Inter', sans-serif;
+  margin: 0;
+  background-color: #f5f7fa;
+  color: #333;
+  line-height: 1.5;
+}
+
+/* Navbar */
+.top-nav {
+  background-color: #fff;
+  padding: 1rem 2rem;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  box-shadow: 0 2px 6px rgba(0,0,0,0.05);
+  position: sticky;
+  top: 0;
+  z-index: 10;
+}
+
+.logo {
+  font-size: 1.5rem;
+  font-weight: 800;
+  color: #007bff;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  cursor: pointer;
+}
+.logo img {
+  height: 35px;
+  width: 35px;
+  object-fit: contain;
+}
+
+.nav-links a {
+  margin: 0 1rem;
+  text-decoration: none;
+  font-weight: 600;
+  color: #333;
+  transition: color 0.2s ease;
+}
+.nav-links a:hover,
+.nav-links a.active {
+  color: #007bff;
+  
+}
+
+.profile-dropdown {
+  font-weight: 600;
+  color: #007bff;
+  cursor: pointer;
+}
+
+/* Main Layout */
+.dashboard-container {
+  padding: 2rem;
+  max-width: 1200px;
+  margin: auto;
+}
+
+section {
+  margin-bottom: 3rem;
+  opacity: 0;
+  transform: translateY(15px);
+  transition: opacity 0.4s ease, transform 0.4s ease;
+  display: none;
+}
+section.active {
+  display: block;
+  opacity: 1;
+  transform: translateY(0);
+}
+
+h2 {
+  margin-bottom: 1rem;
+  font-size: 1.6rem;
+}
+
+/* Request & Provider Cards */
+.request-card, .provider-card {
+  background: #ffffff;
+  padding: 1.5rem;
+  border-radius: 12px;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+  margin-bottom: 1.5rem;
+  transition: transform 0.25s ease, box-shadow 0.25s ease;
+  word-wrap: break-word;
+  word-break: break-word;
+  overflow-wrap: break-word;
+  display: flex;
+  flex-direction: column;
+}
+.request-card:hover, .provider-card:hover {
+  transform: translateY(-6px);
+  box-shadow: 0 6px 16px rgba(0,0,0,0.12);
+}
+
+.provider-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 1.5rem;
+}
+
+/* Description text control */
+.provider-card p, .request-card p {
+  margin: 0.4rem 0;
+  font-size: 0.95rem;
+  color: #444;
+  overflow-wrap: break-word;
+}
+
+/* Clamp long descriptions in cards */
+.card-description {
+  display: -webkit-box;
+  -webkit-line-clamp: 4;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Buttons */
+.btn-primary {
+  background-color: #007bff;
+  color: white;
+  padding: 0.5rem 1rem;
+  border: none;
+  border-radius: 5px;
+  margin-top: 0.6rem;
+  cursor: pointer;
+  transition: background-color 0.2s ease, transform 0.2s ease;
+}
+.btn-primary:hover { background-color: #0056b3; }
+.btn-primary:active { transform: scale(0.95); }
+
+.btn-secondary {
+  background-color: #f0f0f0;
+  border: none;
+  padding: 0.5rem 1rem;
+  margin-top: 0.8rem;
+  cursor: pointer;
+  border-radius: 5px;
+  transition: background-color 0.2s ease, transform 0.2s ease;
+}
+.btn-secondary:hover { background-color: #e0e0e0; }
+.btn-secondary:active { transform: scale(0.95); }
+
+/* Modal */
+.modal {
+  display: none;
+  position: fixed;
+  z-index: 999;
+  left: 0; top: 0;
+  width: 100%; height: 100%;
+  background-color: rgba(0, 0, 0, 0.5);
+  opacity: 0;
+  transition: opacity 0.3s ease;
+}
+.modal.show {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  opacity: 1;
+  padding: 2rem;
+  overflow-y: auto;
+}
+
+/* Expanded modal content */
+.modal-content {
+  background: #fff;
+  padding: 2rem;
+  width: 100%;
+  max-width: 700px;
+  border-radius: 10px;
+  box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+  transform: translateY(-30px);
+  opacity: 0;
+  transition: transform 0.35s ease, opacity 0.35s ease;
+  overflow-wrap: break-word;
+}
+.modal.show .modal-content {
+  transform: translateY(0);
+  opacity: 1;
+}
+
+.close-btn, .close-request-btn {
+  float: right;
+  font-size: 24px;
+  cursor: pointer;
+}
+
+/* Messages */
+.success-message, .error-message {
+  padding: 0.8rem 1rem;
+  border-radius: 6px;
+  margin-bottom: 1rem;
+  animation: fadeOut 3s forwards;
+}
+.success-message { background: #d4edda; color: #155724; }
+.error-message { background: #f8d7da; color: #721c24; }
+
+@keyframes fadeOut {
+  0% { opacity: 1; }
+  80% { opacity: 1; }
+  100% { opacity: 0; display: none; }
+}
