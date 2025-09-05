@@ -14,6 +14,18 @@ $provider_name = $_SESSION['name'] ?? 'Provider';
 $success_message = "";
 $error_message = "";
 
+    // Function to get status color (same as client.php)
+function getStatusColor($status) {
+    switch(strtolower($status)) {
+        case 'pending': return '#ffc107';
+        case 'confirmed': return '#17a2b8';
+        case 'in progress': return '#007bff';
+        case 'completed': return '#28a745';
+        case 'cancelled': return '#dc3545';
+        default: return '#6c757d';
+    }
+}
+
 // ADD new skill
 if (isset($_POST['add_skill'])) {
     $skill_name = trim($_POST['skill_name']);
@@ -79,6 +91,24 @@ if (isset($_POST['delete_skill_id'])) {
         $error_message = "Error deleting skill.";
     }
     $stmt->close();
+}
+
+// Handle status updates
+if (isset($_POST['update_status'])) {
+    $request_id = intval($_POST['request_id']);
+    $new_status = $_POST['new_status'];
+    $valid_statuses = ['Pending', 'Confirmed', 'In Progress', 'Completed', 'Cancelled'];
+    
+    if (in_array($new_status, $valid_statuses)) {
+        $stmt = $conn->prepare("UPDATE request SET Status = ? WHERE RequestID = ? AND ProviderID = ?");
+        $stmt->bind_param("sii", $new_status, $request_id, $provider_id);
+        if ($stmt->execute()) {
+            $success_message = "Status updated successfully!";
+        } else {
+            $error_message = "Error updating status.";
+        }
+        $stmt->close();
+    }
 }
 
 // Get provider's skills
@@ -198,6 +228,7 @@ $my_requests = $stmt->get_result();
                 <button type="submit" name="add_skill" class="btn-primary">✨ Post My Skill</button>
             </form>
             </section>
+           
 
 
         <!-- My Skills -->
@@ -236,24 +267,57 @@ $my_requests = $stmt->get_result();
         </section>
 
         <!-- My Jobs -->
-        <section class="my-jobs" id="jobs-section" style="display:none;">
-            <h2>Client Requests</h2>
-            <div class="jobs-container">
-                <?php if ($my_requests->num_rows > 0): ?>
-                    <?php while($request = $my_requests->fetch_assoc()): ?>
-                        <div class="job-card">
-                            <h3><?php echo htmlspecialchars($request['SkillName']); ?> Request</h3>
-                            <p><strong>Client:</strong> <?php echo htmlspecialchars($request['FName'] . ' ' . $request['LName']); ?></p>
-                            <p><strong>Location:</strong> <?php echo htmlspecialchars($request['Location']); ?></p>
-                            <p><strong>Status:</strong> <?php echo htmlspecialchars($request['Status']); ?></p>
-                            <p><strong>Schedule:</strong> <?php echo htmlspecialchars($request['Schedule']); ?></p>
-                        </div>
-                    <?php endwhile; ?>
-                <?php else: ?>
-                    <p>No client requests yet.</p>
-                <?php endif; ?>
-            </div>
-        </section>
+        <<!-- My Jobs -->
+<section class="my-jobs" id="jobs-section" style="display:none;">
+    <h2>Client Requests</h2>
+    <div class="jobs-container">
+        <?php if ($my_requests->num_rows > 0): ?>
+            <?php while($request = $my_requests->fetch_assoc()): ?>
+                <div class="job-card">
+                    <h3><?php echo htmlspecialchars($request['SkillName']); ?> Request</h3>
+                    <p><strong>Client:</strong> <?php echo htmlspecialchars($request['FName'] . ' ' . $request['LName']); ?></p>
+                    <p><strong>Location:</strong> <?php echo htmlspecialchars($request['Location']); ?></p>
+                    <p><strong>Current Status:</strong> 
+                        <span class="status-badge" style="background-color: <?php echo getStatusColor($request['Status']); ?>">
+                            <?php echo htmlspecialchars($request['Status']); ?>
+                        </span>
+                    </p>
+                    <p><strong>Schedule:</strong> <?php echo htmlspecialchars($request['Schedule']); ?></p>
+                    
+                    <!-- Status Update Buttons -->
+                    <div class="status-actions">
+                        <?php if ($request['Status'] === 'Pending'): ?>
+                            <form method="POST" style="display:inline;">
+                                <input type="hidden" name="request_id" value="<?php echo $request['RequestID']; ?>">
+                                <input type="hidden" name="new_status" value="Confirmed">
+                                <button type="submit" name="update_status" class="btn-accept">Accept Request</button>
+                            </form>
+                            <form method="POST" style="display:inline;">
+                                <input type="hidden" name="request_id" value="<?php echo $request['RequestID']; ?>">
+                                <input type="hidden" name="new_status" value="Cancelled">
+                                <button type="submit" name="update_status" class="btn-reject">Decline</button>
+                            </form>
+                        <?php elseif ($request['Status'] === 'Confirmed'): ?>
+                            <form method="POST" style="display:inline;">
+                                <input type="hidden" name="request_id" value="<?php echo $request['RequestID']; ?>">
+                                <input type="hidden" name="new_status" value="In Progress">
+                                <button type="submit" name="update_status" class="btn-start">Start Work</button>
+                            </form>
+                        <?php elseif ($request['Status'] === 'In Progress'): ?>
+                            <form method="POST" style="display:inline;">
+                                <input type="hidden" name="request_id" value="<?php echo $request['RequestID']; ?>">
+                                <input type="hidden" name="new_status" value="Completed">
+                                <button type="submit" name="update_status" class="btn-complete">Mark Complete</button>
+                            </form>
+                        <?php endif; ?>
+                    </div>
+                </div>
+            <?php endwhile; ?>
+        <?php else: ?>
+            <p>No client requests yet.</p>
+        <?php endif; ?>
+    </div>
+</section>
 
     </main>
 

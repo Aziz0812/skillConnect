@@ -108,10 +108,4 @@ document.addEventListener('DOMContentLoaded', () => {
 
   //add skill first redirect
   
-  document.getElementById('addSkillFirst').addEventListener("click", (e) => {
-    e.preventDefault();
-    const skillsection = document.getElementById('skills-section');
-    showSection('skills-section');
-  });
-  
 });
