@@ -14,6 +14,7 @@ $client_name = $_SESSION['name'] ?? 'Client';
 // Handle booking
 if (isset($_POST['book_skill_id'])) {
     $skill_id = intval($_POST['book_skill_id']);
+    $preferred_schedule = $_POST['preferred_schedule'] ?? 'To be scheduled';
     $stmt = $conn->prepare("SELECT UserID FROM skills WHERE SkillID = ?");
     $stmt->bind_param("i", $skill_id);
     $stmt->execute();
@@ -23,12 +24,15 @@ if (isset($_POST['book_skill_id'])) {
     if ($skill) {
         $provider_id = $skill['UserID'];
         $status = "Pending";
-        $schedule = "To be scheduled";
+        $schedule = $preferred_schedule;
 
         $insert = $conn->prepare("INSERT INTO request (ClientID, ProviderID, SkillID, Status, Schedule) VALUES (?, ?, ?, ?, ?)");
         $insert->bind_param("iiiss", $client_id, $provider_id, $skill_id, $status, $schedule);
         $insert->execute();
-        $success_message = "Service booked successfully!";
+
+        // 🚀 Redirect to avoid resubmission and go to requests tab
+        header("Location: client.php?success=1§ion=request");
+        exit();
     }
 }
 
@@ -43,8 +47,9 @@ $query = "
 $providers = $conn->query($query);
 
 // Client requests with enhanced data
+// Client requests
 $requests_query = "
-    SELECT r.RequestID, r.Status, r.Schedule, s.SkillName, s.Rate, u.FName, u.LName, u.Location
+    SELECT r.RequestID, r.Status, r.Schedule, s.SkillName, s.Rate, u.FName, u.LName, u.Location, r.ConfirmedAt
     FROM request r
     JOIN skills s ON r.SkillID = s.SkillID
     JOIN users u ON r.ProviderID = u.ID
@@ -56,7 +61,7 @@ $stmt->bind_param("i", $client_id);
 $stmt->execute();
 $my_requests = $stmt->get_result();
 
-// Function to get progress percentage based on status
+// Progress helpers
 function getStatusProgress($status) {
     switch(strtolower($status)) {
         case 'pending': return 25;
@@ -67,8 +72,6 @@ function getStatusProgress($status) {
         default: return 25;
     }
 }
-
-// Function to get status color
 function getStatusColor($status) {
     switch(strtolower($status)) {
         case 'pending': return '#ffc107';
@@ -105,8 +108,25 @@ function getStatusColor($status) {
 
 <main class="dashboard-container">
 
-    <?php if (!empty($success_message)): ?>
-        <div class="success-message"><?php echo htmlspecialchars($success_message); ?></div>
+    <?php if (isset($_GET['success']) && $_GET['success'] == 1): ?>
+    <div class="success-message">✅ Service booked successfully!</div>
+    <script>
+      setTimeout(() => {
+        document.querySelector('.success-message')?.classList.add('fade-out');
+      }, 3000);
+
+      // Clean success from URL
+      if (window.history.replaceState) {
+        const url = new URL(window.location);
+        url.searchParams.delete('success');
+        window.history.replaceState({}, document.title, url);
+      }
+
+      // Switch to Requests tab
+      document.addEventListener("DOMContentLoaded", () => {
+        document.getElementById("requestsLink").click();
+      });
+    </script>
     <?php endif; ?>
 
     <!-- Browse Providers -->
@@ -125,18 +145,17 @@ function getStatusColor($status) {
                         <p class="rate-highlight"><strong>Rate:</strong> PHP <?php echo number_format($p['Rate'], 2); ?>/hour</p>
                     </div>
 
-                    <!-- Description with clamp -->
                     <p class="card-description"><?php echo htmlspecialchars($p['Description']); ?></p>
 
-                    <!-- Buttons aligned -->
                     <div class="card-actions">
                         <button class="btn-secondary read-more-btn" 
                                 data-description="<?php echo htmlspecialchars($p['Description']); ?>">
                             Read More
                         </button>
-                        <form method="POST" style="display:inline;">
+                        <form method="POST" class="book-form ajax-book-form" style="display:inline;">
                             <input type="hidden" name="book_skill_id" value="<?php echo $p['SkillID']; ?>">
-                            <button type="submit" class="btn-primary">Book Now</button>
+                            <input type="datetime-local" name="preferred_schedule" required>
+                            <button type="submit" class="btn-primary book-btn">Book Now</button>
                         </form>
                     </div>
                 </div>
@@ -158,7 +177,6 @@ function getStatusColor($status) {
                             </span>
                         </div>
                         
-                        <!-- Progress Bar -->
                         <div class="progress-container">
                             <div class="progress-bar">
                                 <div class="progress-fill" 
@@ -168,7 +186,6 @@ function getStatusColor($status) {
                             <span class="progress-text"><?php echo getStatusProgress($r['Status']); ?>% Complete</span>
                         </div>
 
-                        <!-- Progress Steps -->
                         <div class="progress-steps">
                             <div class="step <?php echo getStatusProgress($r['Status']) >= 25 ? 'completed' : ''; ?>">
                                 <div class="step-circle">1</div>
@@ -196,8 +213,19 @@ function getStatusColor($status) {
                         </div>
 
                         <div class="request-actions">
-                            <?php if (strtolower($r['Status']) === 'pending'): ?>
-                                <button class="btn-secondary">Cancel Request</button>
+                            <?php
+                            $can_cancel = false;
+                            if (strtolower($r['Status']) === 'pending') {
+                                $can_cancel = true;
+                            } elseif (strtolower($r['Status']) === 'confirmed' && !empty($r['ConfirmedAt'])) {
+                                $confirmed_time = strtotime($r['ConfirmedAt']);
+                                if ((time() - $confirmed_time) <= 86400) { // 24 hours
+                                    $can_cancel = true;
+                                }
+                            }
+                            ?>
+                            <?php if ($can_cancel): ?>
+                                <button class="btn-secondary cancel-request-btn" data-request-id="<?php echo $r['RequestID']; ?>">Cancel Request</button>
                             <?php endif; ?>
                             <button class="btn-primary contact-provider-btn" 
                                     data-provider="<?php echo htmlspecialchars($r['FName'] . ' ' . $r['LName']); ?>"
@@ -221,7 +249,7 @@ function getStatusColor($status) {
     </section>
 </main>
 
-<!-- Description Modal -->
+<!-- Modals -->
 <div id="descModal" class="modal" role="dialog" aria-hidden="true">
   <div class="modal-content">
     <span class="close-btn" id="closeDesc">&times;</span>
@@ -230,7 +258,6 @@ function getStatusColor($status) {
   </div>
 </div>
 
-<!-- Contact Provider Modal -->
 <div id="contactModal" class="modal" role="dialog" aria-hidden="true">
   <div class="modal-content">
     <span class="close-btn">&times;</span>

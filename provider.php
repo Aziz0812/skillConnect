@@ -267,21 +267,20 @@ $my_requests = $stmt->get_result();
         </section>
 
         <!-- My Jobs -->
-        <<!-- My Jobs -->
-<section class="my-jobs" id="jobs-section" style="display:none;">
+        <section class="my-jobs" id="jobs-section" style="display:none;">
     <h2>Client Requests</h2>
     <div class="jobs-container">
         <?php if ($my_requests->num_rows > 0): ?>
             <?php while($request = $my_requests->fetch_assoc()): ?>
                 <div class="job-card">
-                    <h3><?php echo htmlspecialchars($request['SkillName']); ?> Request</h3>
-                    <p><strong>Client:</strong> <?php echo htmlspecialchars($request['FName'] . ' ' . $request['LName']); ?></p>
-                    <p><strong>Location:</strong> <?php echo htmlspecialchars($request['Location']); ?></p>
-                    <p><strong>Current Status:</strong> 
+                    <h3>
+                        <?php echo htmlspecialchars($request['SkillName']); ?> Request
                         <span class="status-badge" style="background-color: <?php echo getStatusColor($request['Status']); ?>">
                             <?php echo htmlspecialchars($request['Status']); ?>
                         </span>
-                    </p>
+                    </h3>
+                    <p><strong>Client:</strong> <?php echo htmlspecialchars($request['FName'] . ' ' . $request['LName']); ?></p>
+                    <p><strong>Location:</strong> <?php echo htmlspecialchars($request['Location']); ?></p>
                     <p><strong>Schedule:</strong> <?php echo htmlspecialchars($request['Schedule']); ?></p>
                     
                     <!-- Status Update Buttons -->

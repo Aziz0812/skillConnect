@@ -109,3 +109,30 @@ document.addEventListener('DOMContentLoaded', () => {
   //add skill first redirect
   
 });
+
+document.addEventListener('DOMContentLoaded', function() {
+    function showSection(sectionId) {
+        document.querySelectorAll('.dashboard-container > section').forEach(sec => sec.style.display = 'none');
+        document.getElementById(sectionId).style.display = '';
+    }
+
+    document.getElementById('dashboard').addEventListener('click', function(e) {
+        e.preventDefault();
+        showSection('add-skill');
+    });
+    document.getElementById('postServiceLink').addEventListener('click', function(e) {
+        e.preventDefault();
+        showSection('add-skill');
+    });
+    document.getElementById('skillsLink').addEventListener('click', function(e) {
+        e.preventDefault();
+        showSection('skills-section');
+    });
+    document.getElementById('jobsLink').addEventListener('click', function(e) {
+        e.preventDefault();
+        showSection('jobs-section');
+    });
+
+    // Show dashboard by default
+    showSection('add-skill');
+});

@@ -346,12 +346,12 @@ h2 {
   margin-bottom: 1.5rem;
 }
 
-/* Buttons */
+/* Primary Button (Book Now) */
 .btn-primary {
   background: linear-gradient(135deg, #007bff, #0056b3);
   color: white;
   padding: 0.7rem 1.5rem;
-  border: none;
+  border: 2px solid #0056b3;
   border-radius: 8px;
   cursor: pointer;
   transition: all 0.2s ease;
@@ -367,16 +367,19 @@ h2 {
   box-shadow: 0 4px 12px rgba(0, 123, 255, 0.3);
 }
 
+/* Secondary Button (Read More) */
 .btn-secondary {
   background-color: #f8f9fa;
   border: 2px solid #e9ecef;
   padding: 0.7rem 1.5rem;
-  cursor: pointer;
   border-radius: 8px;
+  cursor: pointer;
   transition: all 0.2s ease;
   font-weight: 600;
-  color: #495057;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
   font-size: 0.85rem;
+  color: #495057;
 }
 
 .btn-secondary:hover {
@@ -455,36 +458,43 @@ h2 {
   border-left: 4px solid #007bff;
 }
 
-/* Messages */
+/* === Toast Messages (Stacked) === */
+.toast-container {
+  position: fixed;
+  top: 1.5rem;
+  right: 1.5rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  z-index: 2000;
+}
+
 .success-message, .error-message {
-  padding: 1rem 1.5rem;
-  border-radius: 8px;
-  margin-bottom: 1.5rem;
-  animation: slideInDown 0.5s ease;
-  font-weight: 500;
+  min-width: 280px;
+  max-width: 350px;
+  padding: 1rem 1.25rem;
+  border-radius: 10px;
+  box-shadow: 0 4px 15px rgba(0,0,0,0.15);
+  animation: slideInRight 0.4s ease, fadeOut 0.5s ease 2.5s forwards;
+  font-weight: 600;
+  color: #fff;
 }
 
 .success-message {
-  background: linear-gradient(135deg, #d4edda, #c3e6cb);
-  color: #155724;
-  border: 1px solid #c3e6cb;
+  background: linear-gradient(135deg, #28a745, #218838);
 }
 
 .error-message {
-  background: linear-gradient(135deg, #f8d7da, #f5c6cb);
-  color: #721c24;
-  border: 1px solid #f5c6cb;
+  background: linear-gradient(135deg, #dc3545, #c82333);
 }
 
-@keyframes slideInDown {
-  from {
-    opacity: 0;
-    transform: translateY(-20px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
+@keyframes slideInRight {
+  from { opacity: 0; transform: translateX(100%); }
+  to   { opacity: 1; transform: translateX(0); }
+}
+
+@keyframes fadeOut {
+  to { opacity: 0; transform: translateX(100%); }
 }
 
 /* Responsive Design */
