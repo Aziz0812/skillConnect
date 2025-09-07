@@ -362,3 +362,71 @@ input[type=number] {
   font-weight: 600;
   color: #007bff;
 }
+
+/* My Jobs Section */
+.jobs-container {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 24px;
+    margin-top: 20px;
+}
+
+.job-card {
+    background: #fff;
+    border-radius: 12px;
+    box-shadow: 0 2px 12px rgba(0,0,0,0.07);
+    padding: 24px 20px;
+    min-width: 320px;
+    max-width: 400px;
+    flex: 1 1 320px;
+    display: flex;
+    flex-direction: column;
+    margin-bottom: 10px;
+    transition: box-shadow 0.2s;
+}
+
+.job-card:hover {
+    box-shadow: 0 4px 24px rgba(0,0,0,0.13);
+}
+
+.job-card h3 {
+    margin-top: 0;
+    margin-bottom: 10px;
+    font-size: 1.2em;
+    color: #007bff;
+}
+
+.status-badge {
+    display: inline-block;
+    padding: 4px 12px;
+    border-radius: 16px;
+    color: #fff;
+    font-size: 0.95em;
+    margin-left: 8px;
+}
+
+.status-actions {
+    margin-top: 18px;
+}
+
+.status-actions button {
+    margin-right: 10px;
+    padding: 7px 16px;
+    border: none;
+    border-radius: 6px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 0.2s;
+}
+
+.btn-accept { background: #17a2b8; color: #fff; }
+.btn-accept:hover { background: #138496; }
+
+.btn-reject { background: #dc3545; color: #fff; }
+.btn-reject:hover { background: #b52a37; }
+
+.btn-start { background: #ffc107; color: #333; }
+.btn-start:hover { background: #e0a800; }
+
+.btn-complete { background: #28a745; color: #fff; }
+.btn-complete:hover { background: #218838; }
