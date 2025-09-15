@@ -61,6 +61,21 @@ $stmt->bind_param("i", $client_id);
 $stmt->execute();
 $my_requests = $stmt->get_result();
 
+$active_requests = [];
+$completed_requests = [];
+$cancelled_requests = [];
+
+while ($r = $my_requests->fetch_assoc()) {
+    $status = strtolower($r['Status']);
+    if ($status === 'completed') {
+        $completed_requests[] = $r;
+    } elseif ($status === 'cancelled') {
+        $cancelled_requests[] = $r;
+    } else {
+        $active_requests[] = $r;
+    }
+}
+
 // Progress helpers
 function getStatusProgress($status) {
     switch(strtolower($status)) {
@@ -166,86 +181,219 @@ function getStatusColor($status) {
     <!-- My Requests -->
     <section id="requestSection">
         <h2>My Service Requests</h2>
-        <div class="request-grid">
-            <?php if ($my_requests->num_rows > 0): ?>
-                <?php while($r = $my_requests->fetch_assoc()): ?>
-                    <div class="request-card enhanced">
-                        <div class="request-header">
-                            <h3><?php echo htmlspecialchars($r['SkillName']); ?></h3>
-                            <span class="status-badge" style="background-color: <?php echo getStatusColor($r['Status']); ?>">
-                                <?php echo htmlspecialchars($r['Status']); ?>
+
+        <!-- Add above the requests section -->
+        <div class="request-tabs">
+            <button class="tab-btn active" data-tab="active">Active</button>
+            <button class="tab-btn" data-tab="completed">Completed</button>
+            <button class="tab-btn" data-tab="cancelled">Cancelled</button>
+        </div>
+
+        <!-- Active Requests -->
+        <section id="requestSection-active" class="request-section active">
+            <h2>Active Requests</h2>
+            <div class="request-grid">
+                <?php if (count($active_requests) > 0): ?>
+                    <?php foreach($active_requests as $r): ?>
+                        <div class="request-card enhanced">
+                            <div class="request-header">
+                                <h3><?php echo htmlspecialchars($r['SkillName']); ?></h3>
+                                <span class="status-badge" style="background-color: <?php echo getStatusColor($r['Status']); ?>">
+                                    <?php echo htmlspecialchars($r['Status']); ?>
                             </span>
-                        </div>
-                        
-                        <div class="progress-container">
-                            <div class="progress-bar">
-                                <div class="progress-fill" 
-                                     style="width: <?php echo getStatusProgress($r['Status']); ?>%; background-color: <?php echo getStatusColor($r['Status']); ?>">
+                            </div>
+                            
+                            <div class="progress-container">
+                                <div class="progress-bar">
+                                    <div class="progress-fill" 
+                                         style="width: <?php echo getStatusProgress($r['Status']); ?>%; background-color: <?php echo getStatusColor($r['Status']); ?>">
+                                    </div>
+                                </div>
+                                <span class="progress-text"><?php echo getStatusProgress($r['Status']); ?>% Complete</span>
+                            </div>
+
+                            <div class="progress-steps">
+                                <div class="step <?php echo getStatusProgress($r['Status']) >= 25 ? 'completed' : ''; ?>">
+                                    <div class="step-circle">1</div>
+                                    <span>Pending</span>
+                                </div>
+                                <div class="step <?php echo getStatusProgress($r['Status']) >= 50 ? 'completed' : ''; ?>">
+                                    <div class="step-circle">2</div>
+                                    <span>Confirmed</span>
+                                </div>
+                                <div class="step <?php echo getStatusProgress($r['Status']) >= 75 ? 'completed' : ''; ?>">
+                                    <div class="step-circle">3</div>
+                                    <span>In Progress</span>
+                                </div>
+                                <div class="step <?php echo getStatusProgress($r['Status']) >= 100 ? 'completed' : ''; ?>">
+                                    <div class="step-circle">4</div>
+                                    <span>Completed</span>
                                 </div>
                             </div>
-                            <span class="progress-text"><?php echo getStatusProgress($r['Status']); ?>% Complete</span>
-                        </div>
+                            
+                            <div class="request-details">
+                                <p><strong>Provider:</strong> <?php echo htmlspecialchars($r['FName'] . " " . $r['LName']); ?></p>
+                                <p><strong>Location:</strong> <?php echo htmlspecialchars($r['Location']); ?></p>
+                                <p><strong>Rate:</strong> PHP <?php echo number_format($r['Rate'], 2); ?>/hour</p>
+                                <p><strong>Schedule:</strong> <?php echo htmlspecialchars($r['Schedule']); ?></p>
+                            </div>
 
-                        <div class="progress-steps">
-                            <div class="step <?php echo getStatusProgress($r['Status']) >= 25 ? 'completed' : ''; ?>">
-                                <div class="step-circle">1</div>
-                                <span>Pending</span>
-                            </div>
-                            <div class="step <?php echo getStatusProgress($r['Status']) >= 50 ? 'completed' : ''; ?>">
-                                <div class="step-circle">2</div>
-                                <span>Confirmed</span>
-                            </div>
-                            <div class="step <?php echo getStatusProgress($r['Status']) >= 75 ? 'completed' : ''; ?>">
-                                <div class="step-circle">3</div>
-                                <span>In Progress</span>
-                            </div>
-                            <div class="step <?php echo getStatusProgress($r['Status']) >= 100 ? 'completed' : ''; ?>">
-                                <div class="step-circle">4</div>
-                                <span>Completed</span>
-                            </div>
-                        </div>
-                        
-                        <div class="request-details">
-                            <p><strong>Provider:</strong> <?php echo htmlspecialchars($r['FName'] . " " . $r['LName']); ?></p>
-                            <p><strong>Location:</strong> <?php echo htmlspecialchars($r['Location']); ?></p>
-                            <p><strong>Rate:</strong> PHP <?php echo number_format($r['Rate'], 2); ?>/hour</p>
-                            <p><strong>Schedule:</strong> <?php echo htmlspecialchars($r['Schedule']); ?></p>
-                        </div>
-
-                        <div class="request-actions">
-                            <?php
-                            $can_cancel = false;
-                            if (strtolower($r['Status']) === 'pending') {
-                                $can_cancel = true;
-                            } elseif (strtolower($r['Status']) === 'confirmed' && !empty($r['ConfirmedAt'])) {
-                                $confirmed_time = strtotime($r['ConfirmedAt']);
-                                if ((time() - $confirmed_time) <= 86400) { // 24 hours
+                            <div class="request-actions">
+                                <?php
+                                $can_cancel = false;
+                                if (strtolower($r['Status']) === 'pending') {
                                     $can_cancel = true;
+                                } elseif (strtolower($r['Status']) === 'confirmed' && !empty($r['ConfirmedAt'])) {
+                                    $confirmed_time = strtotime($r['ConfirmedAt']);
+                                    if ((time() - $confirmed_time) <= 86400) { // 24 hours
+                                        $can_cancel = true;
+                                    }
                                 }
-                            }
-                            ?>
-                            <?php if ($can_cancel): ?>
-                                <button class="btn-secondary cancel-request-btn" data-request-id="<?php echo $r['RequestID']; ?>">Cancel Request</button>
-                            <?php endif; ?>
-                            <button class="btn-primary contact-provider-btn" 
-                                    data-provider="<?php echo htmlspecialchars($r['FName'] . ' ' . $r['LName']); ?>"
-                                    data-service="<?php echo htmlspecialchars($r['SkillName']); ?>">
-                                Contact Provider
-                            </button>
+                                ?>
+                                <?php if ($can_cancel): ?>
+                                    <button class="btn-secondary cancel-request-btn" data-request-id="<?php echo $r['RequestID']; ?>">Cancel Request</button>
+                                <?php endif; ?>
+                                <button class="btn-primary contact-provider-btn" 
+                                        data-provider="<?php echo htmlspecialchars($r['FName'] . ' ' . $r['LName']); ?>"
+                                        data-service="<?php echo htmlspecialchars($r['SkillName']); ?>">
+                                    Contact Provider
+                                </button>
+                            </div>
                         </div>
-                    </div>
-                <?php endwhile; ?>
-            <?php else: ?>
-                <div class="empty-state">
-                    <div class="empty-icon">📋</div>
-                    <h3>No Service Requests Yet</h3>
-                    <p>Browse our available services and book your first appointment!</p>
-                    <button class="btn-primary" onclick="document.getElementById('browseLink').click();">
-                        Browse Services
-                    </button>
-                </div>
-            <?php endif; ?>
-        </div>
+                    <?php endforeach; ?>
+                <?php else: ?>
+                    <div class="empty-state">No active requests.</div>
+                <?php endif; ?>
+            </div>
+        </section>
+
+        <!-- Completed Requests -->
+        <section id="requestSection-completed" class="request-section">
+            <h2>Completed Services</h2>
+            <div class="request-grid">
+                <?php if (count($completed_requests) > 0): ?>
+                    <?php foreach($completed_requests as $r): ?>
+                        <div class="request-card enhanced">
+                            <div class="request-header">
+                                <h3><?php echo htmlspecialchars($r['SkillName']); ?></h3>
+                                <span class="status-badge" style="background-color: <?php echo getStatusColor($r['Status']); ?>">
+                                    <?php echo htmlspecialchars($r['Status']); ?>
+                            </span>
+                            </div>
+                            
+                            <div class="progress-container">
+                                <div class="progress-bar">
+                                    <div class="progress-fill" 
+                                         style="width: <?php echo getStatusProgress($r['Status']); ?>%; background-color: <?php echo getStatusColor($r['Status']); ?>">
+                                    </div>
+                                </div>
+                                <span class="progress-text"><?php echo getStatusProgress($r['Status']); ?>% Complete</span>
+                            </div>
+
+                            <div class="progress-steps">
+                                <div class="step <?php echo getStatusProgress($r['Status']) >= 25 ? 'completed' : ''; ?>">
+                                    <div class="step-circle">1</div>
+                                    <span>Pending</span>
+                                </div>
+                                <div class="step <?php echo getStatusProgress($r['Status']) >= 50 ? 'completed' : ''; ?>">
+                                    <div class="step-circle">2</div>
+                                    <span>Confirmed</span>
+                                </div>
+                                <div class="step <?php echo getStatusProgress($r['Status']) >= 75 ? 'completed' : ''; ?>">
+                                    <div class="step-circle">3</div>
+                                    <span>In Progress</span>
+                                </div>
+                                <div class="step <?php echo getStatusProgress($r['Status']) >= 100 ? 'completed' : ''; ?>">
+                                    <div class="step-circle">4</div>
+                                    <span>Completed</span>
+                                </div>
+                            </div>
+                            
+                            <div class="request-details">
+                                <p><strong>Provider:</strong> <?php echo htmlspecialchars($r['FName'] . " " . $r['LName']); ?></p>
+                                <p><strong>Location:</strong> <?php echo htmlspecialchars($r['Location']); ?></p>
+                                <p><strong>Rate:</strong> PHP <?php echo number_format($r['Rate'], 2); ?>/hour</p>
+                                <p><strong>Schedule:</strong> <?php echo htmlspecialchars($r['Schedule']); ?></p>
+                            </div>
+
+                            <div class="request-actions">
+                                <button class="btn-primary contact-provider-btn" 
+                                        data-provider="<?php echo htmlspecialchars($r['FName'] . ' ' . $r['LName']); ?>"
+                                        data-service="<?php echo htmlspecialchars($r['SkillName']); ?>">
+                                    Contact Provider
+                                </button>
+                            </div>
+                        </div>
+                    <?php endforeach; ?>
+                <?php else: ?>
+                    <div class="empty-state">No completed services.</div>
+                <?php endif; ?>
+            </div>
+        </section>
+
+        <!-- Cancelled Requests -->
+        <section id="requestSection-cancelled" class="request-section">
+            <h2>Cancelled Services</h2>
+            <div class="request-grid">
+                <?php if (count($cancelled_requests) > 0): ?>
+                    <?php foreach($cancelled_requests as $r): ?>
+                        <div class="request-card enhanced">
+                            <div class="request-header">
+                                <h3><?php echo htmlspecialchars($r['SkillName']); ?></h3>
+                                <span class="status-badge" style="background-color: <?php echo getStatusColor($r['Status']); ?>">
+                                    <?php echo htmlspecialchars($r['Status']); ?>
+                            </span>
+                            </div>
+                            
+                            <div class="progress-container">
+                                <div class="progress-bar">
+                                    <div class="progress-fill" 
+                                         style="width: <?php echo getStatusProgress($r['Status']); ?>%; background-color: <?php echo getStatusColor($r['Status']); ?>">
+                                    </div>
+                                </div>
+                                <span class="progress-text"><?php echo getStatusProgress($r['Status']); ?>% Complete</span>
+                            </div>
+
+                            <div class="progress-steps">
+                                <div class="step <?php echo getStatusProgress($r['Status']) >= 25 ? 'completed' : ''; ?>">
+                                    <div class="step-circle">1</div>
+                                    <span>Pending</span>
+                                </div>
+                                <div class="step <?php echo getStatusProgress($r['Status']) >= 50 ? 'completed' : ''; ?>">
+                                    <div class="step-circle">2</div>
+                                    <span>Confirmed</span>
+                                </div>
+                                <div class="step <?php echo getStatusProgress($r['Status']) >= 75 ? 'completed' : ''; ?>">
+                                    <div class="step-circle">3</div>
+                                    <span>In Progress</span>
+                                </div>
+                                <div class="step <?php echo getStatusProgress($r['Status']) >= 100 ? 'completed' : ''; ?>">
+                                    <div class="step-circle">4</div>
+                                    <span>Completed</span>
+                                </div>
+                            </div>
+                            
+                            <div class="request-details">
+                                <p><strong>Provider:</strong> <?php echo htmlspecialchars($r['FName'] . " " . $r['LName']); ?></p>
+                                <p><strong>Location:</strong> <?php echo htmlspecialchars($r['Location']); ?></p>
+                                <p><strong>Rate:</strong> PHP <?php echo number_format($r['Rate'], 2); ?>/hour</p>
+                                <p><strong>Schedule:</strong> <?php echo htmlspecialchars($r['Schedule']); ?></p>
+                            </div>
+
+                            <div class="request-actions">
+                                <button class="btn-primary contact-provider-btn" 
+                                        data-provider="<?php echo htmlspecialchars($r['FName'] . ' ' . $r['LName']); ?>"
+                                        data-service="<?php echo htmlspecialchars($r['SkillName']); ?>">
+                                    Contact Provider
+                                </button>
+                            </div>
+                        </div>
+                    <?php endforeach; ?>
+                <?php else: ?>
+                    <div class="empty-state">No cancelled services.</div>
+                <?php endif; ?>
+            </div>
+        </section>
     </section>
 </main>
 
@@ -270,5 +418,15 @@ function getStatusColor($status) {
 </div>
 
 <script src="js/client.js"></script>
+<script>
+  document.querySelectorAll('.tab-btn').forEach(btn => {
+      btn.addEventListener('click', function() {
+          document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+          this.classList.add('active');
+          document.querySelectorAll('.request-section').forEach(sec => sec.classList.remove('active'));
+          document.getElementById('requestSection-' + this.dataset.tab).classList.add('active');
+      });
+  });
+</script>
 </body>
 </html>
