@@ -14,6 +14,18 @@ document.addEventListener('DOMContentLoaded', () => {
     // Save active section
     localStorage.setItem("activeSection", sectionId);
 
+    // If showing requests, always default to Active tab
+    if (sectionId === "requestSection") {
+      document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+      document.querySelectorAll('.request-section').forEach(sec => sec.classList.remove('active'));
+      const activeTab = document.querySelector('.tab-btn[data-tab="active"]');
+      const activeSection = document.getElementById('requestSection-active');
+      if (activeTab && activeSection) {
+        activeTab.classList.add('active');
+        activeSection.classList.add('active');
+      }
+    }
+
     // Scroll adjust
     setTimeout(() => {
       const section = document.getElementById(sectionId);
@@ -235,6 +247,62 @@ document.addEventListener('DOMContentLoaded', () => {
         btn.textContent = 'Cancel Request';
         alert('Network error.');
       });
+    });
+  });
+
+  // === Request Tabs ===
+  document.querySelectorAll('.tab-btn').forEach(btn => {
+    btn.addEventListener('click', function() {
+      document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+      this.classList.add('active');
+      document.querySelectorAll('.request-section').forEach(sec => sec.classList.remove('active'));
+      const target = document.getElementById('requestSection-' + this.dataset.tab);
+      if (target) target.classList.add('active');
+    });
+  });
+
+  // Nav link switching
+  const browseLink = document.getElementById("browseLink");
+  const requestsLink = document.getElementById("requestsLink");
+  const browseSection = document.getElementById("browseSection");
+  const requestSection = document.getElementById("requestSection");
+
+  if (browseLink && requestsLink && browseSection && requestSection) {
+      browseLink.addEventListener("click", function(e) {
+          e.preventDefault();
+          browseSection.classList.add("active");
+          requestSection.classList.remove("active");
+          browseLink.classList.add("active");
+          requestsLink.classList.remove("active");
+      });
+
+      requestsLink.addEventListener("click", function(e) {
+          e.preventDefault();
+          browseSection.classList.remove("active");
+          requestSection.classList.add("active");
+          requestsLink.classList.add("active");
+          browseLink.classList.remove("active");
+
+          // Always show Active tab by default
+          document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+          document.querySelectorAll('.request-section').forEach(sec => sec.classList.remove('active'));
+          const activeTab = document.querySelector('.tab-btn[data-tab="active"]');
+          const activeSection = document.getElementById('requestSection-active');
+          if (activeTab && activeSection) {
+              activeTab.classList.add('active');
+              activeSection.classList.add('active');
+          }
+      });
+  }
+
+  // Tab switching inside My Requests
+  document.querySelectorAll('.tab-btn').forEach(btn => {
+    btn.addEventListener('click', function() {
+        document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+        this.classList.add('active');
+        document.querySelectorAll('.request-section').forEach(sec => sec.classList.remove('active'));
+        const target = document.getElementById('requestSection-' + this.dataset.tab);
+        if (target) target.classList.add('active');
     });
   });
 });
