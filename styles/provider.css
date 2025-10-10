@@ -430,3 +430,62 @@ input[type=number] {
 
 .btn-complete { background: #28a745; color: #fff; }
 .btn-complete:hover { background: #218838; }
+
+/* Dashboard */
+.dashboard-overview p {
+  font-size: 1.1em;
+  font-weight: 600;
+  color: #007bff;
+  margin: 0;
+}
+
+.stat-number {
+  color: #333;
+}
+
+#dashboardChart {
+  margin-top: 20px;
+}
+/* Enhanced Dashboard */
+.dashboard-overview {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 20px;
+  margin-bottom: 20px;
+}
+
+.stat-number {
+  color: #333;
+  font-size: 1.2em;
+  font-weight: 700;
+}
+
+#dashboardChart {
+  margin-top: 20px;
+  max-width: 100%;
+}
+
+/* Tabs Styling */
+.tabs {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 20px;
+}
+
+.tab-btn {
+  padding: 8px 16px;
+  border: none;
+  border-radius: 6px;
+  background-color: #e9ecef;
+  cursor: pointer;
+  transition: background-color 0.2s;
+}
+
+.tab-btn.active {
+  background-color: #007bff;
+  color: white;
+}
+
+.tab-btn:hover {
+  background-color: #dee2e6;
+}

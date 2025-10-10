@@ -38,21 +38,23 @@ if (isset($_POST['book_skill_id'])) {
 
 // Providers & skills
 $query = "
-    SELECT s.SkillID, s.SkillName, s.Description, s.Rate, u.FName, u.LName, u.Location
+    SELECT s.SkillID, sc.CategoryName AS SkillName, s.Description, s.Rate, u.FName, u.LName, u.Location
     FROM skills s
     JOIN users u ON s.UserID = u.ID
+    JOIN skill_categories sc ON s.CategoryID = sc.CategoryID
     WHERE u.Role = 'provider'
-    ORDER BY s.SkillName, u.FName
+    ORDER BY sc.CategoryName, u.FName
 ";
 $providers = $conn->query($query);
 
 // Client requests with enhanced data
 // Client requests
 $requests_query = "
-    SELECT r.RequestID, r.Status, r.Schedule, s.SkillName, s.Rate, u.FName, u.LName, u.Location, r.ConfirmedAt
+    SELECT r.RequestID, r.Status, r.Schedule, sc.CategoryName AS SkillName, s.Rate, u.FName, u.LName, u.Location, r.ConfirmedAt
     FROM request r
     JOIN skills s ON r.SkillID = s.SkillID
     JOIN users u ON r.ProviderID = u.ID
+    JOIN skill_categories sc ON s.CategoryID = sc.CategoryID
     WHERE r.ClientID = ?
     ORDER BY r.RequestID DESC
 ";
