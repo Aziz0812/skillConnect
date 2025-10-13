@@ -1,4 +1,9 @@
 document.addEventListener('DOMContentLoaded', () => {
+  if (window.location.search) {
+  window.history.replaceState({}, document.title, window.location.pathname + "#skills-section");
+}
+
+  
   console.log('provider.js loaded âœ…');
 
   // ----------------------------
@@ -14,6 +19,41 @@ document.addEventListener('DOMContentLoaded', () => {
   const postServiceSection = document.getElementById('add-skill');
   const skillsSection = document.getElementById('skills-section');
   const jobsSection = document.getElementById('jobs-section');
+    // --- JOB TAB SWITCHER (animated + styled) ---
+    const jobTabs = document.querySelectorAll('#jobs-section [data-tab]');
+    const jobSections = document.querySelectorAll('#jobs-section .request-section');
+
+    jobTabs.forEach(btn => {
+      btn.addEventListener('click', () => {
+        // reset all buttons
+        jobTabs.forEach(b => b.classList.remove('active', 'btn-primary'));
+        btn.classList.add('active', 'btn-primary');
+
+        // fade out all sections
+        jobSections.forEach(sec => {
+          sec.style.opacity = 0;
+          setTimeout(() => sec.style.display = 'none', 200);
+        });
+
+        // show the selected one
+        const targetId = `requestSection-${btn.dataset.tab}`;
+        const target = document.getElementById(targetId);
+        if (target) {
+          setTimeout(() => {
+            target.style.display = 'block';
+            target.style.opacity = 1;
+          }, 200);
+        }
+      });
+    });
+
+    // initial state
+    jobSections.forEach(sec => {
+      sec.style.display = sec.id === 'requestSection-active' ? 'block' : 'none';
+      sec.style.opacity = sec.id === 'requestSection-active' ? 1 : 0;
+    });
+
+
   const allSections = [dashboardSection, postServiceSection, skillsSection, jobsSection];
 
   const categorySelect = document.getElementById('category');
@@ -79,7 +119,8 @@ document.addEventListener('DOMContentLoaded', () => {
         const rate = parseFloat(e.target.value);
         previewRate.textContent = isNaN(rate)
           ? '—'
-          : `₱${rate.toFixed(2)}/hour`;
+          : `₱${Math.round(rate)}/hour`;
+
       });
 
       // Image live preview
@@ -112,14 +153,22 @@ document.addEventListener('DOMContentLoaded', () => {
 
       if (select.value === 'others') {
         otherGroup.style.display = 'block';
-        otherInput.required = true;
-        otherInput.focus();
+        // Only require if empty (so editing existing custom skill won’t block updates)
+        if (!otherInput.value.trim()) {
+          otherInput.required = true;
+          otherInput.focus();
+        } else {
+          otherInput.required = false;
+        }
       } else {
         otherGroup.style.display = 'none';
         otherInput.required = false;
         otherInput.value = '';
       }
+
     }
+
+
 
     // Listen for changes on all category selects (add + edit)
     document.addEventListener('change', e => {
@@ -127,6 +176,16 @@ document.addEventListener('DOMContentLoaded', () => {
         toggleOtherField(e.target);
       }
     });
+
+    // --- APPLY CLEANING FOR ALL "Other (Specify)" INPUTS (add + edit) ---
+      document.addEventListener('input', e => {
+        if (e.target.matches('#otherCategory, .otherCategoryInput')) {
+          let value = e.target.value.replace(/[^A-Za-z\s]/g, '');
+          value = value.toLowerCase().replace(/\b\w/g, c => c.toUpperCase());
+          e.target.value = value;
+        }
+      });
+
 
     // Initialize correct visibility on page load
     document.querySelectorAll('select[name="category_id"], #category').forEach(sel => {
@@ -480,5 +539,28 @@ document.addEventListener('DOMContentLoaded', () => {
         statusCtx.canvas.parentElement.innerHTML += '<div class="text-danger text-center mt-2">Failed to load chart data.</div>';
       }
     }
+    // --- SEARCH & FILTER LOGIC (auto-clear + reset when opening My Skills) ---
+      const searchInput = document.getElementById("searchSkill");
+      const categorySelect = document.getElementById("filterCategory");
+      const skillsLink = document.getElementById("skillsLink");
+
+      // clear search when category changes
+      if (categorySelect && searchInput) {
+        categorySelect.addEventListener("change", () => {
+          searchInput.value = "";
+        });
+      }
+
+          // reset both and reload clean URL when opening My Skills tab
+    if (skillsLink) {
+      skillsLink.addEventListener("click", (e) => {
+        e.preventDefault(); // stop normal anchor behavior
+        // go to base page without any ?filter or ?search params
+        window.location.replace(window.location.origin + window.location.pathname + "#skills-section");
+
+      });
+    }
+
   }
+  
 });
