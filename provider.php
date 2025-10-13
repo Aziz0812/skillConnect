@@ -4,64 +4,217 @@ ini_set('display_errors', 1);
 
 session_start();
 require "db.php";
+        /* ---------------------------
+        AJAX / API endpoints for charts & availability
+        --------------------------- */
+        if (isset($_GET['ajax']) && $_GET['ajax'] === '1') {
+            header('Content-Type: application/json; charset=utf-8');
 
-// If user not logged in or not a provider, redirect to login
-if (!isset($_SESSION['user_id']) || $_SESSION['role'] !== 'provider') {
-    header("Location: login.php");
-    exit();
-}
+            if (!isset($_SESSION['user_id']) || $_SESSION['role'] !== 'provider') {
+                echo json_encode(['ok' => false, 'error' => 'Unauthorized']);
+                exit;
+            }
 
-$provider_id = $_SESSION['user_id'];
-$provider_name = $_SESSION['name'] ?? 'Provider';
+            $pid = intval($_SESSION['user_id']);
+            $action = $_GET['action'] ?? '';
 
-// Grab any session messages (set after redirects) and then clear them
-$success_message = $_SESSION['success_message'] ?? "";
-$error_message = $_SESSION['error_message'] ?? "";
-unset($_SESSION['success_message'], $_SESSION['error_message']);
+            /* ---------------------------
+            (1) LIST AVAILABILITY
+            --------------------------- */
+            if ($action === 'list_availability') {
+                $stmt = $conn->prepare("
+                    SELECT AvailabilityID, DayOfWeek, StartTime, EndTime
+                    FROM provider_availability
+                    WHERE ProviderID = ?
+                    ORDER BY FIELD(DayOfWeek,'Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'), StartTime
+                ");
+                $stmt->bind_param("i", $pid);
+                $stmt->execute();
+                $res = $stmt->get_result();
+                $data = [];
+                while ($row = $res->fetch_assoc()) {
+                    $data[] = $row;
+                }
+                echo json_encode(['ok' => true, 'data' => $data]);
+                exit;
+            }
 
-// Function to get status color
-function getStatusColor($status) {
-    switch (strtolower($status)) {
-        case 'pending': return '#ffc107';
-        case 'confirmed': return '#17a2b8';
-        case 'in progress': return '#007bff';
-        case 'completed': return '#28a745';
-        case 'cancelled': return '#dc3545';
-        default: return '#6c757d';
-    }
-}
+            /* ---------------------------
+            (2) ADD AVAILABILITY
+            --------------------------- */
+            if ($action === 'add_availability' && $_SERVER['REQUEST_METHOD'] === 'POST') {
+                $day = trim($_POST['day'] ?? '');
+                $start = trim($_POST['start_time'] ?? '');
+                $end = trim($_POST['end_time'] ?? '');
 
-// Redirect helper that respects an anchor/hash
-function redirect_with_message($type, $msg, $hash = '#dashboard-section') {
-    if ($type === 'success') {
-        $_SESSION['success_message'] = $msg;
-    } else {
-        $_SESSION['error_message'] = $msg;
-    }
-    // sanitize hash: allow only # followed by letters, numbers, hyphen and underscore
-    if (!preg_match('/^#[A-Za-z0-9\-\_]+$/', $hash)) {
-        $hash = '#dashboard-section';
-    }
-    header("Location: provider.php" . $hash);
-    exit();
-}
+                // Basic validation
+                if (!$day || !$start || !$end) {
+                    echo json_encode(['ok' => false, 'error' => 'Missing fields.']);
+                    exit;
+                }
 
-// -----------------------------
-// ADD NEW SKILL
-// -----------------------------
-if (isset($_POST['add_skill'])) {
-    $return_to = $_POST['return_to'] ?? '#skills-section';
-    $category_id = isset($_POST['category_id']) && $_POST['category_id'] !== 'others' ? intval($_POST['category_id']) : 0;
-    $other_category = trim($_POST['other_category'] ?? '');
-    $description = trim($_POST['description'] ?? '');
-    $rate = isset($_POST['rate']) ? floatval($_POST['rate']) : 0;
+                if ($start === $end) {
+                    echo json_encode(['ok' => false, 'error' => 'Start and end time cannot be the same.']);
+                    exit;
+                }
 
-    if (!empty($_POST['category_id']) && $_POST['category_id'] === 'others' && !empty($other_category)) {
-        // Add custom category skill
-        $stmt = $conn->prepare("INSERT INTO skills (UserID, CategoryID, Description, Rate, CustomCategory) VALUES (?, NULL, ?, ?, ?)");     
-        $stmt->bind_param("isds", $provider_id, $description, $rate, $other_category);
+                // Prevent duplicates / overlapping
+                $check = $conn->prepare("
+                    SELECT * FROM provider_availability 
+                    WHERE ProviderID = ? 
+                    AND DayOfWeek = ?
+                    AND (
+                        (StartTime = ? AND EndTime = ?) 
+                        OR (? < EndTime AND ? > StartTime)
+                    )
+                ");
+                $check->bind_param("isssss", $pid, $day, $start, $end, $start, $end);
+                $check->execute();
+                $exists = $check->get_result()->num_rows > 0;
 
-        if ($stmt->execute()) {
+                if ($exists) {
+                    echo json_encode(['ok' => false, 'error' => 'Time overlaps with existing availability.']);
+                    exit;
+                }
+
+                $stmt = $conn->prepare("
+                    INSERT INTO provider_availability (ProviderID, DayOfWeek, StartTime, EndTime)
+                    VALUES (?, ?, ?, ?)
+                ");
+                $stmt->bind_param("isss", $pid, $day, $start, $end);
+                $ok = $stmt->execute();
+
+                echo json_encode(['ok' => $ok]);
+                exit;
+            }
+
+            /* ---------------------------
+            (3) DELETE AVAILABILITY
+            --------------------------- */
+            if ($action === 'delete_availability' && $_SERVER['REQUEST_METHOD'] === 'POST') {
+                $id = intval($_POST['id'] ?? 0);
+                if ($id <= 0) {
+                    echo json_encode(['ok' => false, 'error' => 'Invalid ID']);
+                    exit;
+                }
+                $stmt = $conn->prepare("DELETE FROM provider_availability WHERE AvailabilityID = ? AND ProviderID = ?");
+                $stmt->bind_param("ii", $id, $pid);
+                $ok = $stmt->execute();
+                echo json_encode(['ok' => $ok]);
+                exit;
+            }
+
+           // --- REQUESTS OVER TIME ---
+            if ($action === 'requests_over_time') {
+                $data = [];
+                $stmt = $conn->prepare("
+                    SELECT DATE_FORMAT(r.CreatedAt, '%b %Y') AS month, COUNT(*) AS count
+                    FROM request r
+                    INNER JOIN skills s ON r.SkillID = s.SkillID
+                    WHERE s.UserID = ?
+                    GROUP BY month
+                    ORDER BY MIN(r.CreatedAt) ASC
+                ");
+                $stmt->bind_param("i", $pid);
+                $stmt->execute();
+                $result = $stmt->get_result();
+                if ($result && $result->num_rows > 0) {
+                    while ($row = $result->fetch_assoc()) {
+                        $data[] = $row;
+                    }
+                }
+                $stmt->close();
+                echo json_encode(['ok' => true, 'data' => $data]);
+                exit;
+            }
+    
+           // --- STATUS SUMMARY ---
+            if ($action === 'status_summary') {
+                $data = [];
+                $stmt = $conn->prepare("
+                    SELECT r.Status, COUNT(*) AS count
+                    FROM request r
+                    INNER JOIN skills s ON r.SkillID = s.SkillID
+                    WHERE s.UserID = ?
+                    GROUP BY r.Status
+                ");
+                $stmt->bind_param("i", $pid);
+                $stmt->execute();
+                $result = $stmt->get_result();
+                if ($result && $result->num_rows > 0) {
+                    while ($row = $result->fetch_assoc()) {
+                        $data[$row['Status']] = (int)$row['count'];
+                    }
+                }
+                $stmt->close();
+                echo json_encode(['ok' => true, 'data' => $data]);
+                exit;
+            }
+
+            // --- FALLBACK ---
+            echo json_encode(['ok' => false, 'error' => 'Unknown action']);
+            exit;
+        } // Ã¢Å“â€¦ closes main ajax block
+
+
+
+        // If user not logged in or not a provider, redirect to login
+        if (!isset($_SESSION['user_id']) || $_SESSION['role'] !== 'provider') {
+            header("Location: login.php");
+            exit();
+        }
+
+        $provider_id = $_SESSION['user_id'];
+        $provider_name = $_SESSION['name'] ?? 'Provider';
+
+        // Grab any session messages (set after redirects) and then clear them
+        $success_message = $_SESSION['success_message'] ?? "";
+        $error_message = $_SESSION['error_message'] ?? "";
+        unset($_SESSION['success_message'], $_SESSION['error_message']);
+
+        // Function to get status color
+        function getStatusColor($status) {
+            switch (strtolower($status)) {
+                case 'pending': return '#ffc107';
+                case 'confirmed': return '#17a2b8';
+                case 'in progress': return '#007bff';
+                case 'completed': return '#28a745';
+                case 'cancelled': return '#dc3545';
+                default: return '#6c757d';
+            }
+        }
+
+        // Redirect helper that respects an anchor/hash
+        function redirect_with_message($type, $msg, $hash = '#dashboard-section') {
+            if ($type === 'success') {
+                $_SESSION['success_message'] = $msg;
+            } else {
+                $_SESSION['error_message'] = $msg;
+            }
+            // sanitize hash: allow only # followed by letters, numbers, hyphen and underscore
+            if (!preg_match('/^#[A-Za-z0-9\-\_]+$/', $hash)) {
+                $hash = '#dashboard-section';
+            }
+            header("Location: provider.php" . $hash);
+            exit();
+        }
+
+        // -----------------------------
+        // ADD NEW SKILL
+        // -----------------------------
+        if (isset($_POST['add_skill'])) {
+            $return_to = $_POST['return_to'] ?? '#skills-section';
+            $category_id = isset($_POST['category_id']) && $_POST['category_id'] !== 'others' ? intval($_POST['category_id']) : 0;
+            $other_category = trim($_POST['other_category'] ?? '');
+            $description = trim($_POST['description'] ?? '');
+            $rate = isset($_POST['rate']) ? floatval($_POST['rate']) : 0;
+
+            if (!empty($_POST['category_id']) && $_POST['category_id'] === 'others' && !empty($other_category)) {
+                // Add custom category skill
+                $stmt = $conn->prepare("INSERT INTO skills (UserID, CategoryID, Description, Rate, CustomCategory) VALUES (?, NULL, ?, ?, ?)");     
+            $stmt->bind_param("isds", $provider_id, $description, $rate, $other_category);
+
+            if ($stmt->execute()) {
             $stmt->close();
             redirect_with_message('success', 'Custom skill added successfully!', $return_to);
         } else {
@@ -120,8 +273,25 @@ if (isset($_POST['edit_skill'])) {
             $check_stmt->close();
             redirect_with_message('error', 'You already have this skill.', $return_to);
         } else {
-            $stmt = $conn->prepare("UPDATE skills SET CategoryID=?, Description=?, Rate=?, CustomCategory=? WHERE SkillID=? AND UserID=?");
-            $stmt->bind_param("isdssi", $category_id, $description, $rate, $custom_category, $skill_id, $provider_id);
+            // Decide correct update depending on whether custom category was provided
+            if (!empty($custom_category) && (empty($category_id) || (isset($_POST['category_id']) && $_POST['category_id'] === 'others'))) {
+                // Save as custom category: CategoryID = NULL, store CustomCategory
+                $stmt = $conn->prepare("
+                    UPDATE skills 
+                    SET CategoryID = NULL, Description = ?, Rate = ?, CustomCategory = ? 
+                    WHERE SkillID = ? AND UserID = ?
+                ");
+                $stmt->bind_param("sdssi", $description, $rate, $custom_category, $skill_id, $provider_id);
+            } else {
+                // Save as normal category: store CategoryID and clear CustomCategory
+                $stmt = $conn->prepare("
+                    UPDATE skills 
+                    SET CategoryID = ?, Description = ?, Rate = ?, CustomCategory = NULL 
+                    WHERE SkillID = ? AND UserID = ?
+                ");
+                $stmt->bind_param("isdii", $category_id, $description, $rate, $skill_id, $provider_id);
+            }
+
             if ($stmt->execute()) {
                 $stmt->close();
                 $check_stmt->close();
@@ -186,16 +356,44 @@ if (isset($_POST['update_status'])) {
 // -----------------------------
 $skills_query = "
     SELECT 
-        s.SkillID, 
-        s.CategoryID, 
-        COALESCE(c.CategoryName, s.CustomCategory) AS CategoryName, 
-        s.Description, 
-        s.Rate 
-    FROM skills s 
-    LEFT JOIN skill_categories c ON s.CategoryID = c.CategoryID 
-    WHERE s.UserID = ? 
-    ORDER BY s.SkillID DESC
+        s.SkillID,
+        s.CategoryID,
+        s.CustomCategory,
+        COALESCE(c.CategoryName, s.CustomCategory) AS CategoryName,
+        s.Description,
+        s.Rate,
+        s.DateAdded,
+        COUNT(r.RequestID) AS BookingCount
+    FROM skills s
+    LEFT JOIN skill_categories c ON s.CategoryID = c.CategoryID
+    LEFT JOIN request r ON s.SkillID = r.SkillID
+    WHERE s.UserID = ?
+    GROUP BY s.SkillID
 ";
+ 
+// determine sort (default newest)
+$sort = $_GET['sort'] ?? 'newest';
+
+switch ($sort) {
+    case 'oldest':
+        $skills_query .= " ORDER BY s.DateAdded ASC";
+        break;
+    case 'highrate':
+    $skills_query .= " ORDER BY (CASE WHEN s.Rate IS NULL OR s.Rate = 0 THEN 1 ELSE 0 END), s.Rate DESC";
+    break;
+    case 'lowrate':
+    $skills_query .= " ORDER BY (CASE WHEN s.Rate IS NULL OR s.Rate = 0 THEN 1 ELSE 0 END), s.Rate ASC";
+    break;
+    case 'mostbooked':
+        $skills_query .= " ORDER BY BookingCount DESC";
+        break;
+    default:
+        $skills_query .= " ORDER BY s.DateAdded DESC";
+        break;
+}
+
+
+
 
 $stmt = $conn->prepare($skills_query);
 $stmt->bind_param("i", $provider_id);
@@ -334,91 +532,203 @@ if ($my_requests) {
             </div>
         <?php endif; ?>
 
-        <!-- Dashboard -->
-        <section class="dashboard" id="dashboard-section">
-            <h2 class="mb-4">Dashboard</h2>
-            <div class="row row-cols-1 row-cols-md-3 g-4 mb-4">
-                <div class="col">
-                    <div class="card text-center">
-                        <div class="card-body">
-                            <h5 class="card-title">Total Skills Posted</h5>
-                            <p class="card-text display-6"><?php echo $total_skills; ?></p>
-                        </div>
-                    </div>
-                </div>
-                <div class="col">
-                    <div class="card text-center">
-                        <div class="card-body">
-                            <h5 class="card-title">Active Requests</h5>
-                            <p class="card-text display-6"><?php echo $active_count; ?></p>
-                        </div>
-                    </div>
-                </div>
-                <div class="col">
-                    <div class="card text-center">
-                        <div class="card-body">
-                            <h5 class="card-title">Completed Requests</h5>
-                            <p class="card-text display-6"><?php echo $completed_count; ?></p>
-                        </div>
-                    </div>
-                </div>
-                <div class="col">
-                    <div class="card text-center">
-                        <div class="card-body">
-                            <h5 class="card-title">Cancelled Requests</h5>
-                            <p class="card-text display-6"><?php echo $cancelled_count; ?></p>
-                        </div>
-                    </div>
+       <!-- Dashboard -->
+<section class="dashboard" id="dashboard-section">
+    <h2 class="mb-4">Dashboard</h2>
+
+    <hr>
+    <h6 class="mt-4">Current Schedule</h6>
+    <div id="availabilityList" class="mt-2"></div>
+
+    <div class="row row-cols-1 row-cols-md-3 g-4 mb-4">
+        <div class="col">
+            <div class="card text-center">
+                <div class="card-body">
+                    <h5 class="card-title">Total Skills Posted</h5>
+                    <p class="card-text display-6"><?php echo $total_skills; ?></p>
                 </div>
             </div>
-            <div class="d-flex gap-2">
-                <a href="#add-skill" class="btn btn-primary">Post New Service</a>
-                <a href="#jobs-section" class="btn btn-primary">View Jobs</a>
+        </div>
+        <div class="col">
+            <div class="card text-center">
+                <div class="card-body">
+                    <h5 class="card-title">Active Requests</h5>
+                    <p class="card-text display-6"><?php echo $active_count; ?></p>
+                </div>
             </div>
-            <canvas id="dashboardChart" class="mt-4" width="400" height="200"></canvas>
-        </section>
+        </div>
+        <div class="col">
+            <div class="card text-center">
+                <div class="card-body">
+                    <h5 class="card-title">Completed Requests</h5>
+                    <p class="card-text display-6"><?php echo $completed_count; ?></p>
+                </div>
+            </div>
+        </div>
+        <div class="col">
+            <div class="card text-center">
+                <div class="card-body">
+                    <h5 class="card-title">Cancelled Requests</h5>
+                    <p class="card-text display-6"><?php echo $cancelled_count; ?></p>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="d-flex gap-2">
+        <a href="#add-skill" class="btn btn-primary">Post New Service</a>
+        <a href="#jobs-section" class="btn btn-primary">View Jobs</a>
+    </div>
+    <canvas id="dashboardChart" class="mt-4" width="400" height="200"></canvas>
+
+    <!-- ====== AVAILABILITY SECTION ====== -->
+    <div class="card p-3">
+        <h5>My Availability</h5>
+        <form id="availabilityForm" class="row g-2 mb-3">
+            <div class="col-12 col-md-4">
+                <div class="days-checkbox-group d-flex flex-wrap gap-2">
+                    <label><input type="checkbox" name="days[]" value="Monday"> Mon</label>
+                    <label><input type="checkbox" name="days[]" value="Tuesday"> Tue</label>
+                    <label><input type="checkbox" name="days[]" value="Wednesday"> Wed</label>
+                    <label><input type="checkbox" name="days[]" value="Thursday"> Thu</label>
+                    <label><input type="checkbox" name="days[]" value="Friday"> Fri</label>
+                    <label><input type="checkbox" name="days[]" value="Saturday"> Sat</label>
+                    <label><input type="checkbox" name="days[]" value="Sunday"> Sun</label>
+                </div>
+            </div>
+            <div class="time-group d-flex flex-column me-2">
+                <label for="availStart" class="form-label mb-1 fw-semibold">Start Time</label>
+                <input type="time" name="start_time" id="availStart" class="form-control" required>
+                <small class="text-muted">Use 12-hour format (e.g. 9:00 AM)</small>
+            </div>
+            <div class="time-group d-flex flex-column me-2">
+                <label for="availEnd" class="form-label mb-1 fw-semibold">End Time</label>
+                <input type="time" name="end_time" id="availEnd" class="form-control" required>
+                <small class="text-muted">Use 12-hour format (e.g. 5:00 PM)</small>
+            </div>
+            <div class="col-12 col-md-2 d-grid">
+                <button type="submit" class="btn btn-primary">Add</button>
+            </div>
+        </form>
+        <div id="availabilityList">
+            <div class="text-muted"></div>
+        </div>
+    </div>
+
+    <!-- ====== DASHBOARD ANALYTICS ====== -->
+    <div class="row g-4 mb-4">
+        <div class="col-md-6">
+            <div class="card p-3">
+                <h5 class="mb-2">Requests Over Time</h5>
+                <canvas id="requestsOverTimeChart" height="200"></canvas>
+            </div>
+        </div>
+        <div class="col-md-6">
+            <div class="card p-3">
+                <h5 class="mb-2">Requests Summary</h5>
+                <canvas id="statusSummaryChart" height="200"></canvas>
+            </div>
+        </div>
+    </div>
+</section>
 
         <!-- Post Service -->
         <section class="add-skill" id="add-skill" style="display:none;">
-            <h2 class="mb-4">Post a New Service</h2>
-            <form method="POST" name="add_skill" class="card p-4">
+        <h2 class="mb-4">Post a New Service</h2>
+        <div class="row g-4">
+            <!-- Form -->
+            <div class="col-md-6">
+            <form method="POST" name="add_skill" class="card p-4 shadow-sm">
                 <div class="mb-3">
-                    <label for="category" class="form-label">Service Category</label>
-                    <select id="category" name="category_id" class="form-select" required>
-                        <option value="" disabled selected>Select a category</option>
-                        <?php
-                        $categories = $conn->query("SELECT CategoryID, CategoryName FROM skill_categories WHERE IsApproved = 1");
-                        if ($categories) {
-                            while ($cat = $categories->fetch_assoc()) {
-                                echo "<option value='{$cat['CategoryID']}'>" . htmlspecialchars($cat['CategoryName']) . "</option>";
-                            }
-                        } else {
-                            echo "<option value='' disabled>Database error. Contact admin.</option>";
-                        }
-                        ?>
-                        <option value="others">Other (Specify)</option>
-                    </select>
+                <label for="category" class="form-label">Service Category</label>
+                <select id="category" name="category_id" class="form-select" required>
+                    <option value="" disabled selected>Select a category</option>
+                    <?php
+                    $categories = $conn->query("SELECT CategoryID, CategoryName FROM skill_categories WHERE IsApproved = 1");
+                    if ($categories) {
+                    while ($cat = $categories->fetch_assoc()) {
+                        echo "<option value='{$cat['CategoryID']}'>" . htmlspecialchars($cat['CategoryName']) . "</option>";
+                    }
+                    } else {
+                    echo "<option value='' disabled>Database error. Contact admin.</option>";
+                    }
+                    ?>
+                    <option value="others" <?php echo (empty($skill['CategoryID']) && !empty($skill['CustomCategory'])) ? 'selected' : ''; ?>>
+                    Other (Specify)
+                    </option>
+                </select>
                 </div>
+
                 <div class="mb-3" id="otherCategoryGroup" style="display:none;">
-                    <label for="otherCategory" class="form-label">Specify Other Category</label>
-                    <input type="text" id="otherCategory" name="other_category" class="form-control" placeholder="Enter custom category">
+                <label for="otherCategory" class="form-label">Specify Other Category</label>
+                <input type="text" id="otherCategory" name="other_category"
+                        class="form-control"
+                        placeholder="Enter custom category"
+                        pattern="[A-Za-z\s]{2,50}"
+                        title="Only letters and spaces allowed (2–50 characters)">
+                <small class="text-muted">Letters only, 2–50 characters.</small>
+
+
                 </div>
+
                 <div class="mb-3">
-                    <label for="description" class="form-label">Description</label>
-                    <textarea id="description" name="description" class="form-control" required maxlength="500" placeholder="Describe your service..."></textarea>
+                <label for="description" class="form-label">Description</label>
+                <textarea id="description" name="description" class="form-control"
+                            required maxlength="500"
+                            placeholder="Describe your service..."></textarea>
+                <small id="descCounter" class="text-muted float-end"></small>
                 </div>
+
                 <div class="mb-3">
-                    <label for="rate" class="form-label">Rate (₱/hour)</label>
-                    <input type="number" id="rate" name="rate" class="form-control" min="0" step="0.01" required placeholder="Enter rate (e.g., 500.00)">
-                    <small id="ratePreview" class="text-muted mt-1"></small>
+                <label for="rate" class="form-label">Rate (₱/hour)</label>
+                <input type="number" id="rate" name="rate" class="form-control"
+                        min="0" step="0.01" required placeholder="Enter rate (e.g., 500.00)">
+                <small id="ratePreview" class="text-muted mt-1"></small>
                 </div>
-                <button type="submit" name="add_skill" class="btn btn-primary">✨ Post My Skill</button>
+
+                <div class="mb-3">
+                <label for="serviceImage" class="form-label">Upload Service Image (optional)</label>
+                <input type="file" id="serviceImage" name="service_image"
+                        class="form-control" accept="image">
+                </div>
+
+                <button type="submit" name="add_skill" class="btn btn-primary">Post My Skill</button>
+
+                <div class="alert alert-info mt-3">
+                <strong>Tips:</strong> Use clear titles and detailed descriptions to attract more clients.
+                </div>
             </form>
+            </div>
+
+            <!-- Live Preview -->
+            <div class="col-md-6">
+            <div id="servicePreview" class="card p-4 shadow-sm border-0">
+                <h5 class="text-primary mb-3"><i class="bi bi-eye me-2"></i>Service Preview</h5>
+                <p><strong>Category:</strong> <span id="previewCategory">—</span></p>
+                <p><strong>Description:</strong> <span id="previewDescription">—</span></p>
+                <p><strong>Rate:</strong> <span id="previewRate">—</span></p>
+                <div id="previewImage" class="mt-2 text-center text-muted small">No image selected</div>
+            </div>
+            </div>
+        </div>
         </section>
+
 
         <!-- My Skills -->
         <section class="my-skills" id="skills-section" style="display:none;">
-            <h2 class="mb-4">My Skills</h2>
+            <h2 class="mb-4 d-flex justify-content-between align-items-center">
+                <span>My Skills</span>
+                <form method="GET" class="d-flex align-items-center gap-2">
+                    <label for="sort" class="form-label mb-0">Sort by:</label>
+                    <select name="sort" id="sort" class="form-select form-select-sm" onchange="this.form.submit()">
+                        <option value="newest" <?= ($_GET['sort'] ?? '') === 'newest' ? 'selected' : '' ?>>Newest First</option>
+                        <option value="oldest" <?= ($_GET['sort'] ?? '') === 'oldest' ? 'selected' : '' ?>>Oldest First</option>
+                        <option value="highrate" <?= ($_GET['sort'] ?? '') === 'highrate' ? 'selected' : '' ?>>Highest Rate</option>
+                        <option value="lowrate" <?= ($_GET['sort'] ?? '') === 'lowrate' ? 'selected' : '' ?>>Lowest Rate</option>
+                        <option value="mostbooked" <?= ($_GET['sort'] ?? '') === 'mostbooked' ? 'selected' : '' ?>>Most Booked</option>
+                    </select>
+                </form>
+            </h2>
+
             <div class="row row-cols-1 row-cols-md-2 g-4">
                 <?php if ($my_skills && $my_skills->num_rows > 0): ?>
                     <?php while ($skill = $my_skills->fetch_assoc()): ?>
@@ -431,32 +741,62 @@ if ($my_requests) {
                                             ?>
                                      </h5>
 
-                                    <p class="card-text"><strong>Rate:</strong> ₱<?php echo number_format($skill['Rate'] ?? 0, 2); ?>/hour</p>
-                                    <p class="card-text"><strong>Description:</strong> <?php echo htmlspecialchars($skill['Description'] ?? 'No description'); ?></p>
+                                   <p class="card-text mb-1">
+                                        <span class="badge bg-success"><i class="bi bi-cash-stack me-1"></i>₱<?php echo number_format($skill['Rate'] ?? 0, 2); ?>/hr</span>
+                                    </p>
+                                    <p class="card-text small text-muted mb-2">
+                                        <i class="bi bi-calendar3 me-1"></i>
+                                        Added on: <?php echo date('M d, Y', strtotime($skill['DateAdded'])); ?></p>
+                                    </p>
+                                    <p class="card-text small text-muted mb-2">
+                                        <i class="bi bi-people me-1"></i>
+                                        Bookings: <?php echo (int)($skill['BookingCount'] ?? 0); ?>
+                                    </p>
+                                    <p class="card-text">
+                                        <strong>Description:</strong>
+                                        <?php echo htmlspecialchars($skill['Description'] ?? 'No description'); ?>
+                                    </p>
+
                                     <div class="d-flex gap-2">
                                         <form method="POST" class="d-inline-flex flex-column gap-2">
-                                            <input type="hidden" name="skill_id" value="<?php echo $skill['SkillID'] ?? 0; ?>">
-                                            <select name="category_id" class="form-select" required>
-                                                <?php
-                                                $categories = $conn->query("SELECT CategoryID, CategoryName FROM skill_categories WHERE IsApproved = 1");
-                                                if ($categories) {
-                                                    while ($cat = $categories->fetch_assoc()) {
-                                                        $selected = ($cat['CategoryID'] == ($skill['CategoryID'] ?? null)) ? 'selected' : '';
-                                                        echo "<option value='{$cat['CategoryID']}' $selected>" . htmlspecialchars($cat['CategoryName']) . "</option>";
-                                                    }
+                                        <input type="hidden" name="skill_id" value="<?php echo $skill['SkillID'] ?? 0; ?>">
+
+                                        <select name="category_id" class="form-select" required>
+                                            <?php
+                                            $categories = $conn->query("SELECT CategoryID, CategoryName FROM skill_categories WHERE IsApproved = 1");
+                                            if ($categories) {
+                                                while ($cat = $categories->fetch_assoc()) {
+                                                    $selected = ($cat['CategoryID'] == ($skill['CategoryID'] ?? null)) ? 'selected' : '';
+                                                    echo "<option value='{$cat['CategoryID']}' $selected>" . htmlspecialchars($cat['CategoryName']) . "</option>";
                                                 }
-                                                ?>
-                                                    <option value="others" <?php echo (empty($skill['CategoryID']) && !empty($skill['CategoryName'])) ? 'selected' : ''; ?>>
-                                                        <?php echo htmlspecialchars($skill['CategoryName'] ?? 'Other'); ?>
-                                                    </option>
-                                            </select>
-                                            <input type="hidden" name="custom_category" value="<?php echo empty($skill['CategoryID']) ? htmlspecialchars($skill['CategoryName'] ?? '') : ''; ?>">
+                                            }
+                                            ?>
+                                            <option value="others" <?php echo (empty($skill['CategoryID']) && !empty($skill['CustomCategory'])) ? 'selected' : ''; ?>>
+                                                Other (Specify)
+                                            </option>
+                                        </select>
 
+                                        <!-- Specify input (visible only if custom category exists) -->
+                                        <div class="mb-2 otherCategoryGroup" style="<?php echo (!empty($skill['CustomCategory'])) ? '' : 'display:none;'; ?>">
+                                            <label class="form-label">Specify Other Category</label>
+                                            <input type="text" class="form-control otherCategoryInput" name="custom_category"
+                                                vali cue="<?php echo htmlspecialchars($skill['CustomCategory'] ?? ''); ?>"
+                                                placeholder="Enter custom category"
+                                                pattern="[A-Za-z\s]{2,50}"
+                                                title="Only letters and spaces are allowed (2–50 characters)">
 
-                                            <textarea name="description" class="form-control" required maxlength="500"><?php echo htmlspecialchars($skill['Description'] ?? ''); ?></textarea>
-                                            <input type="number" name="rate" class="form-control" value="<?php echo number_format($skill['Rate'] ?? 0, 2); ?>" required min="0" step="0.01">
-                                            <button type="submit" name="edit_skill" class="btn btn-warning">Update</button>
-                                        </form>
+                                        </div>
+
+                                        <textarea name="description" class="form-control" required maxlength="500">
+                                            <?php echo htmlspecialchars($skill['Description'] ?? ''); ?>
+                                        </textarea>
+
+                                        <input type="number" name="rate" class="form-control"
+                                            value="<?php echo number_format($skill['Rate'] ?? 0, 2); ?>"
+                                            required min="0" step="0.01">
+
+                                        <button type="submit" name="edit_skill" class="btn btn-warning">Update</button>
+                                    </form>
 
                                         <form method="POST" class="d-inline-flex flex-column gap-2" onsubmit="return confirm('Delete skill?')">
                                             <input type="hidden" name="delete_skill_id" value="<?php echo $skill['SkillID'] ?? 0; ?>">
@@ -592,11 +932,15 @@ if ($my_requests) {
                 </div>
             </section>
         </section>
+                 
+
+
     </main>
 
     <!-- Bootstrap JS and Custom JS -->
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <script src="js/provider.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 
     <script>
     // Tabs functionality (keeps original behavior)
