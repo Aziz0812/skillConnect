@@ -496,3 +496,21 @@ input[type=number] {
     gap: 8px;
   }
 }
+#jobs-section .btn-group button {
+  transition: all 0.3s ease;
+}
+#jobs-section .btn-group button.active {
+  color: #fff !important;
+  background-color: #0d6efd !important;
+  box-shadow: 0 0 8px rgba(13,110,253,0.4);
+}
+#jobs-section .request-section {
+  transition: opacity 0.25s ease-in-out;
+}
+#servicePreview {
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+#servicePreview:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 8px 18px rgba(0,0,0,0.15);
+}

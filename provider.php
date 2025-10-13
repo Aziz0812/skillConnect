@@ -262,10 +262,23 @@ if (isset($_POST['edit_skill'])) {
     $description = trim($_POST['description'] ?? '');
     $rate = isset($_POST['rate']) ? floatval($_POST['rate']) : 0;
     $custom_category = trim($_POST['custom_category'] ?? '');
+        if (empty($custom_category) && !empty($_POST['existing_custom_category'])) {
+            $custom_category = trim($_POST['existing_custom_category']);
+        }
 
-    if (($category_id > 0 || !empty($custom_category)) && !empty($description) && $rate > 0) {
-        $check_stmt = $conn->prepare("SELECT SkillID FROM skills WHERE UserID = ? AND (CategoryID = ? OR CustomCategory = ?) AND SkillID != ?");
-        $check_stmt->bind_param("iisi", $provider_id, $category_id, $custom_category, $skill_id);
+
+    if (($category_id > 0 || !empty($custom_category) || !empty($_POST['existing_custom_category'])) && !empty($description) && $rate > 0)
+ {
+        if (!empty($custom_category)) {
+                // Check for duplicate custom skill (exclude current skill)
+                $check_stmt = $conn->prepare("SELECT SkillID FROM skills WHERE UserID = ? AND CustomCategory = ? AND SkillID != ?");
+                $check_stmt->bind_param("isi", $provider_id, $custom_category, $skill_id);
+            } else {
+                // Check for duplicate normal category skill (exclude current skill)
+                $check_stmt = $conn->prepare("SELECT SkillID FROM skills WHERE UserID = ? AND CategoryID = ? AND SkillID != ?");
+                $check_stmt->bind_param("iii", $provider_id, $category_id, $skill_id);
+            }
+
         $check_stmt->execute();
         $check_result = $check_stmt->get_result();
 
@@ -351,52 +364,73 @@ if (isset($_POST['update_status'])) {
     }
 }
 
-// -----------------------------
-// GET PROVIDER'S SKILLS
-// -----------------------------
-$skills_query = "
-    SELECT 
-        s.SkillID,
-        s.CategoryID,
-        s.CustomCategory,
-        COALESCE(c.CategoryName, s.CustomCategory) AS CategoryName,
-        s.Description,
-        s.Rate,
-        s.DateAdded,
-        COUNT(r.RequestID) AS BookingCount
-    FROM skills s
-    LEFT JOIN skill_categories c ON s.CategoryID = c.CategoryID
-    LEFT JOIN request r ON s.SkillID = r.SkillID
-    WHERE s.UserID = ?
-    GROUP BY s.SkillID
-";
+        // -----------------------------
+        // GET PROVIDER'S SKILLS (with search + filter)
+        // -----------------------------
+        $sort = $_GET['sort'] ?? 'newest';
+        $search = trim($_GET['search'] ?? '');
+        $filter_category = $_GET['filter_category'] ?? '';
+
+        $order_clause = match($sort) {
+            'oldest' => 's.DateAdded ASC',
+            'highrate' => 's.Rate DESC',
+            'lowrate' => 's.Rate ASC',
+            'mostbooked' => 'BookingCount DESC',
+            default => 's.DateAdded DESC'
+        };
+
+        $skills_query = "
+            SELECT 
+                s.SkillID,
+                s.CategoryID,
+                s.CustomCategory,
+                COALESCE(c.CategoryName, s.CustomCategory) AS CategoryName,
+                s.Description,
+                s.Rate,
+                s.DateAdded,
+                COUNT(r.RequestID) AS BookingCount
+            FROM skills s
+            LEFT JOIN skill_categories c ON s.CategoryID = c.CategoryID
+            LEFT JOIN request r ON s.SkillID = r.SkillID
+            WHERE s.UserID = ?
+        ";
+
+        if (!empty($search)) {
+            $skills_query .= " AND (
+                c.CategoryName LIKE CONCAT('%', ?, '%')
+                OR s.CustomCategory LIKE CONCAT('%', ?, '%')
+                OR s.Description LIKE CONCAT('%', ?, '%')
+            )";
+        }
+
+        if (!empty($filter_category)) {
+            $skills_query .= " AND s.CategoryID = ?";
+        }
+
+        $skills_query .= "
+            GROUP BY s.SkillID
+            ORDER BY $order_clause
+        ";
+
  
-// determine sort (default newest)
-$sort = $_GET['sort'] ?? 'newest';
 
-switch ($sort) {
-    case 'oldest':
-        $skills_query .= " ORDER BY s.DateAdded ASC";
-        break;
-    case 'highrate':
-    $skills_query .= " ORDER BY (CASE WHEN s.Rate IS NULL OR s.Rate = 0 THEN 1 ELSE 0 END), s.Rate DESC";
-    break;
-    case 'lowrate':
-    $skills_query .= " ORDER BY (CASE WHEN s.Rate IS NULL OR s.Rate = 0 THEN 1 ELSE 0 END), s.Rate ASC";
-    break;
-    case 'mostbooked':
-        $skills_query .= " ORDER BY BookingCount DESC";
-        break;
-    default:
-        $skills_query .= " ORDER BY s.DateAdded DESC";
-        break;
-}
+        // Bind parameters dynamically based on filter/search
+        if (!empty($search) && !empty($filter_category)) {
+            $stmt = $conn->prepare($skills_query);
+            $stmt->bind_param("isssi", $provider_id, $search, $search, $search, $filter_category);
+        } elseif (!empty($search)) {
+            $stmt = $conn->prepare($skills_query);
+            $stmt->bind_param("isss", $provider_id, $search, $search, $search);
+        } elseif (!empty($filter_category)) {
+            $stmt = $conn->prepare($skills_query);
+            $stmt->bind_param("ii", $provider_id, $filter_category);
+        } else {
+            $stmt = $conn->prepare($skills_query);
+            $stmt->bind_param("i", $provider_id);
+        }
 
 
 
-
-$stmt = $conn->prepare($skills_query);
-$stmt->bind_param("i", $provider_id);
 if ($stmt->execute()) {
     $my_skills = $stmt->get_result();
 } else {
@@ -633,10 +667,17 @@ if ($my_requests) {
 
         <!-- Post Service -->
         <section class="add-skill" id="add-skill" style="display:none;">
-        <h2 class="mb-4">Post a New Service</h2>
+        <div class="d-flex justify-content-between align-items-center mb-4">
+            <h2 class="mb-0 fw-bold">Post a New Service</h2>
+            <div class="text-muted small text-end" style="max-width: 300px;">
+                <i class="bi bi-lightbulb me-1 text-warning"></i>
+                
+            </div>
+            </div>
+
         <div class="row g-4">
             <!-- Form -->
-            <div class="col-md-6">
+            <div class="col-12 mb-4">
             <form method="POST" name="add_skill" class="card p-4 shadow-sm">
                 <div class="mb-3">
                 <label for="category" class="form-label">Service Category</label>
@@ -660,15 +701,18 @@ if ($my_requests) {
 
                 <div class="mb-3" id="otherCategoryGroup" style="display:none;">
                 <label for="otherCategory" class="form-label">Specify Other Category</label>
-                <input type="text" id="otherCategory" name="other_category"
+                <input type="text" id="otherCategory" name="custom_category"
                         class="form-control"
                         placeholder="Enter custom category"
                         pattern="[A-Za-z\s]{2,50}"
-                        title="Only letters and spaces allowed (2–50 characters)">
+                        title="Only letters and spaces allowed (2–50 characters)"
+                        value="<?php echo htmlspecialchars($skill['CustomCategory'] ?? ''); ?>">
                 <small class="text-muted">Letters only, 2–50 characters.</small>
 
-
+                <input type="hidden" name="existing_custom_category"
+                        value="<?php echo htmlspecialchars($skill['CustomCategory'] ?? ''); ?>">
                 </div>
+
 
                 <div class="mb-3">
                 <label for="description" class="form-label">Description</label>
@@ -680,8 +724,10 @@ if ($my_requests) {
 
                 <div class="mb-3">
                 <label for="rate" class="form-label">Rate (₱/hour)</label>
-                <input type="number" id="rate" name="rate" class="form-control"
-                        min="0" step="0.01" required placeholder="Enter rate (e.g., 500.00)">
+               <input type="number" id="rate" name="rate" class="form-control"
+                     min="1" step="1" required placeholder="Enter rate (e.g., 500)">
+
+
                 <small id="ratePreview" class="text-muted mt-1"></small>
                 </div>
 
@@ -700,15 +746,34 @@ if ($my_requests) {
             </div>
 
             <!-- Live Preview -->
-            <div class="col-md-6">
-            <div id="servicePreview" class="card p-4 shadow-sm border-0">
-                <h5 class="text-primary mb-3"><i class="bi bi-eye me-2"></i>Service Preview</h5>
-                <p><strong>Category:</strong> <span id="previewCategory">—</span></p>
-                <p><strong>Description:</strong> <span id="previewDescription">—</span></p>
-                <p><strong>Rate:</strong> <span id="previewRate">—</span></p>
-                <div id="previewImage" class="mt-2 text-center text-muted small">No image selected</div>
+            <div id="servicePreview" class="card shadow-lg border-0 overflow-hidden">
+            <div class="card-header bg-gradient text-white" 
+                style="background: linear-gradient(135deg, #007bff, #6610f2);">
+                <h5 class="mb-0"><i class="bi bi-eye me-2"></i>Live Service Preview</h5>
+            </div>
+
+            <div class="card-body">
+                <div class="text-center mb-3">
+                <div id="previewImage" 
+                    class="rounded shadow-sm border d-flex align-items-center justify-content-center bg-light"
+                    style="height: 180px; overflow: hidden;">
+                    <span class="text-muted">No image selected</span>
+                </div>
+                </div>
+
+                <h5 class="text-primary mb-2" id="previewCategory">—</h5>
+                <p class="text-muted small mb-3" id="previewDescription">No description yet.</p>
+
+                <div class="d-flex justify-content-center align-items-center gap-2 mt-3">
+                <span class="badge bg-success fs-6 p-2" id="previewRate">₱0/hr</span>
+                </div>
+            </div>
+
+            <div class="card-footer text-center text-muted small">
+                <em>Preview updates live as you type.</em>
             </div>
             </div>
+
         </div>
         </section>
 
@@ -728,6 +793,36 @@ if ($my_requests) {
                     </select>
                 </form>
             </h2>
+
+            <!-- Search and Filter Controls -->
+                <form method="GET" class="row g-2 align-items-end mb-3">
+                <div class="col-md-4">
+                    <label for="searchSkill" class="form-label mb-1">Search Skill</label>
+                    <input type="text" name="search" id="searchSkill" class="form-control"
+                        placeholder="Search by name or description"
+                        value="<?php echo htmlspecialchars($_GET['search'] ?? ''); ?>">
+                </div>
+
+                <div class="col-md-3">
+                    <label for="filterCategory" class="form-label mb-1">Filter by Category</label>
+                    <select name="filter_category" id="filterCategory" class="form-select">
+                    <option value="">All Categories</option>
+                    <?php
+                        $cats = $conn->query("SELECT CategoryID, CategoryName FROM skill_categories WHERE IsApproved = 1");
+                        while ($c = $cats->fetch_assoc()):
+                        $selected = ($_GET['filter_category'] ?? '') == $c['CategoryID'] ? 'selected' : '';
+                        echo "<option value='{$c['CategoryID']}' $selected>" . htmlspecialchars($c['CategoryName']) . "</option>";
+                        endwhile;
+                    ?>
+                    </select>
+                </div>
+
+            
+
+                <div class="col-md-2">
+                    <button type="submit" class="btn btn-primary w-100">Filter</button>
+                </div>
+                </form>
 
             <div class="row row-cols-1 row-cols-md-2 g-4">
                 <?php if ($my_skills && $my_skills->num_rows > 0): ?>
@@ -780,7 +875,7 @@ if ($my_requests) {
                                         <div class="mb-2 otherCategoryGroup" style="<?php echo (!empty($skill['CustomCategory'])) ? '' : 'display:none;'; ?>">
                                             <label class="form-label">Specify Other Category</label>
                                             <input type="text" class="form-control otherCategoryInput" name="custom_category"
-                                                vali cue="<?php echo htmlspecialchars($skill['CustomCategory'] ?? ''); ?>"
+                                                value="<?php echo htmlspecialchars($skill['CustomCategory'] ?? ''); ?>"
                                                 placeholder="Enter custom category"
                                                 pattern="[A-Za-z\s]{2,50}"
                                                 title="Only letters and spaces are allowed (2–50 characters)">
@@ -792,8 +887,9 @@ if ($my_requests) {
                                         </textarea>
 
                                         <input type="number" name="rate" class="form-control"
-                                            value="<?php echo number_format($skill['Rate'] ?? 0, 2); ?>"
-                                            required min="0" step="0.01">
+                                            value="<?php echo (int)($skill['Rate'] ?? 0); ?>"
+                                            required min="1" step="1">
+
 
                                         <button type="submit" name="edit_skill" class="btn btn-warning">Update</button>
                                     </form>
@@ -822,116 +918,272 @@ if ($my_requests) {
                 <button class="btn btn-outline-primary" data-tab="cancelled">Cancelled</button>
             </div>
 
-            <!-- Active Requests -->
+                        <!-- Active Requests -->
             <section id="requestSection-active" class="request-section active">
-                <h2 class="mb-4">Active Requests</h2>
-                <div class="row row-cols-1 row-cols-md-2 g-4">
-                    <?php if (is_array($active_requests) && count($active_requests) > 0): ?>
-                        <?php foreach ($active_requests as $r): ?>
-                            <div class="col">
-                                <div class="card">
-                                    <div class="card-body">
-                                        <div class="d-flex justify-content-between align-items-center mb-3">
-                                            <h5 class="card-title"><?php echo htmlspecialchars($r['SkillName'] ?? 'Unnamed Skill'); ?></h5>
-                                            <span class="badge" style="background-color: <?php echo getStatusColor($r['Status'] ?? ''); ?>">
-                                                <?php echo htmlspecialchars($r['Status'] ?? 'Unknown'); ?>
-                                            </span>
-                                        </div>
-                                        <p class="card-text"><strong>Client:</strong> <?php echo htmlspecialchars(trim(($r['FName'] ?? '') . ' ' . ($r['LName'] ?? ''))) ?: 'Unknown Client'; ?></p>
-                                        <p class="card-text"><strong>Location:</strong> <?php echo htmlspecialchars($r['Location'] ?? 'Unknown'); ?></p>
-                                        <p class="card-text"><strong>Schedule:</strong> <?php echo htmlspecialchars($r['Schedule'] ?? 'Not set'); ?></p>
-                                        <div class="mt-3">
-                                            <?php if (strtolower($r['Status'] ?? '') === 'pending'): ?>
-                                                <form method="POST" class="d-inline">
-                                                    <input type="hidden" name="request_id" value="<?php echo $r['RequestID'] ?? 0; ?>">
-                                                    <input type="hidden" name="new_status" value="Confirmed">
-                                                    <button type="submit" name="update_status" class="btn btn-success me-2">Accept</button>
-                                                </form>
-                                                <form method="POST" class="d-inline">
-                                                    <input type="hidden" name="request_id" value="<?php echo $r['RequestID'] ?? 0; ?>">
-                                                    <input type="hidden" name="new_status" value="Cancelled">
-                                                    <button type="submit" name="update_status" class="btn btn-danger">Decline</button>
-                                                </form>
-                                            <?php elseif (strtolower($r['Status'] ?? '') === 'confirmed'): ?>
-                                                <form method="POST" class="d-inline">
-                                                    <input type="hidden" name="request_id" value="<?php echo $r['RequestID'] ?? 0; ?>">
-                                                    <input type="hidden" name="new_status" value="In Progress">
-                                                    <button type="submit" name="update_status" class="btn btn-warning">Start</button>
-                                                </form>
-                                            <?php elseif (strtolower($r['Status'] ?? '') === 'in progress'): ?>
-                                                <form method="POST" class="d-inline">
-                                                    <input type="hidden" name="request_id" value="<?php echo $r['RequestID'] ?? 0; ?>">
-                                                    <input type="hidden" name="new_status" value="Completed">
-                                                    <button type="submit" name="update_status" class="btn btn-success">Complete</button>
-                                                </form>
-                                            <?php endif; ?>
-                                        </div>
-                                    </div>
-                                </div>
+            <h2 class="mb-4">Active Requests</h2>
+            <div class="row row-cols-1 row-cols-md-2 g-4">
+                <?php if (is_array($active_requests) && count($active_requests) > 0): ?>
+                <?php foreach ($active_requests as $r): ?>
+                    <div class="col">
+                    <div class="card">
+                        <div class="card-header d-flex justify-content-between align-items-center px-3 py-2"
+                            style="background-color: <?php echo getStatusColor($r['Status'] ?? ''); ?>; color:#fff;">
+                        <strong><?php echo htmlspecialchars($r['Status'] ?? 'Unknown'); ?></strong>
+                        <small>
+                            <?php
+                            $raw = $r['Schedule'] ?? null;
+                            if ($raw && preg_match('/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/', $raw)) {
+                                $dt = DateTime::createFromFormat('Y-m-d\TH:i', $raw);
+                                echo htmlspecialchars($dt ? $dt->format('F j, Y • g:i A') : 'Not set');
+                            } else {
+                                echo htmlspecialchars($raw ?: 'Not set');
+                            }
+                            ?>
+                        </small>
+                        </div>
+
+                        <div class="card-body">
+                        <div class="d-flex align-items-center mb-3">
+                            <?php if (!empty($r['Avatar'])): ?>
+                            <img src="<?php echo htmlspecialchars($r['Avatar']); ?>"
+                                alt="Avatar"
+                                class="rounded-circle me-2"
+                                style="width:40px;height:40px;object-fit:cover;">
+                            <?php else: ?>
+                            <div class="rounded-circle bg-secondary text-white d-flex align-items-center justify-content-center me-2"
+                                style="width:40px;height:40px;">
+                                <?php echo strtoupper(substr($r['FName'] ?? '?',0,1)); ?>
                             </div>
-                        <?php endforeach; ?>
-                    <?php else: ?>
-                        <div class="alert alert-info" role="alert">No active requests.</div>
-                    <?php endif; ?>
-                </div>
+                            <?php endif; ?>
+                            <h6 class="mb-0">
+                            <?php echo htmlspecialchars(trim(($r['FName'] ?? '') . ' ' . ($r['LName'] ?? ''))) ?: 'Unknown Client'; ?>
+                            </h6>
+                        </div>
+
+                        <div class="d-flex justify-content-between align-items-center mb-3">
+                            <h5 class="card-title"><?php echo htmlspecialchars($r['SkillName'] ?? 'Unnamed Skill'); ?></h5>
+                            <span class="badge"
+                                style="background-color: <?php echo getStatusColor($r['Status'] ?? ''); ?>">
+                            <?php echo htmlspecialchars($r['Status'] ?? 'Unknown'); ?>
+                            </span>
+                        </div>
+
+                        <p class="card-text"><strong>Client:</strong>
+                            <?php echo htmlspecialchars(trim(($r['FName'] ?? '') . ' ' . ($r['LName'] ?? ''))) ?: 'Unknown Client'; ?>
+                        </p>
+
+                        <p class="card-text"><strong>Location:</strong>
+                            <?php echo htmlspecialchars($r['Location'] ?? 'Unknown'); ?>
+                        </p>
+
+                        <p class="card-text"><strong>Schedule:</strong>
+                            <?php
+                            $raw = $r['Schedule'] ?? null;
+                            if ($raw && preg_match('/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/', $raw)) {
+                                $dt = DateTime::createFromFormat('Y-m-d\TH:i', $raw);
+                                echo htmlspecialchars($dt ? $dt->format('F j, Y • g:i A') : 'Not set');
+                            } else {
+                                echo htmlspecialchars($raw ?: 'Not set');
+                            }
+                            ?>
+                        </p>
+                        </div>
+
+                        <div class="card-footer bg-light d-flex justify-content-end gap-2">
+                        <?php if (strtolower($r['Status'] ?? '') === 'pending'): ?>
+                            <form method="POST" class="d-inline">
+                            <input type="hidden" name="request_id" value="<?php echo $r['RequestID'] ?? 0; ?>">
+                            <input type="hidden" name="new_status" value="Confirmed">
+                            <button type="submit" name="update_status" class="btn btn-success me-2">Accept</button>
+                            </form>
+                            <form method="POST" class="d-inline">
+                            <input type="hidden" name="request_id" value="<?php echo $r['RequestID'] ?? 0; ?>">
+                            <input type="hidden" name="new_status" value="Cancelled">
+                            <button type="submit" name="update_status" class="btn btn-danger">Decline</button>
+                            </form>
+                        <?php elseif (strtolower($r['Status'] ?? '') === 'confirmed'): ?>
+                            <form method="POST" class="d-inline">
+                            <input type="hidden" name="request_id" value="<?php echo $r['RequestID'] ?? 0; ?>">
+                            <input type="hidden" name="new_status" value="In Progress">
+                            <button type="submit" name="update_status" class="btn btn-warning">Start</button>
+                            </form>
+                        <?php elseif (strtolower($r['Status'] ?? '') === 'in progress'): ?>
+                            <form method="POST" class="d-inline">
+                            <input type="hidden" name="request_id" value="<?php echo $r['RequestID'] ?? 0; ?>">
+                            <input type="hidden" name="new_status" value="Completed">
+                            <button type="submit" name="update_status" class="btn btn-success">Complete</button>
+                            </form>
+                        <?php endif; ?>
+                        </div>
+                    </div>
+                    </div>
+                <?php endforeach; ?>
+                <?php else: ?>
+                <div class="alert alert-info" role="alert">No active requests.</div>
+                <?php endif; ?>
+            </div>
             </section>
+
 
             <!-- Completed Requests -->
             <section id="requestSection-completed" class="request-section">
-                <h2 class="mb-4">Completed Requests</h2>
-                <div class="row row-cols-1 row-cols-md-2 g-4">
-                    <?php if (is_array($completed_requests) && count($completed_requests) > 0): ?>
-                        <?php foreach ($completed_requests as $r): ?>
-                            <div class="col">
-                                <div class="card">
-                                    <div class="card-body">
-                                        <div class="d-flex justify-content-between align-items-center mb-3">
-                                            <h5 class="card-title"><?php echo htmlspecialchars($r['SkillName'] ?? 'Unnamed Skill'); ?></h5>
-                                            <span class="badge" style="background-color: <?php echo getStatusColor($r['Status'] ?? ''); ?>">
-                                                <?php echo htmlspecialchars($r['Status'] ?? 'Unknown'); ?>
-                                            </span>
-                                        </div>
-                                        <p class="card-text"><strong>Client:</strong> <?php echo htmlspecialchars(trim(($r['FName'] ?? '') . ' ' . ($r['LName'] ?? ''))) ?: 'Unknown Client'; ?></p>
-                                        <p class="card-text"><strong>Location:</strong> <?php echo htmlspecialchars($r['Location'] ?? 'Unknown'); ?></p>
-                                        <p class="card-text"><strong>Schedule:</strong> <?php echo htmlspecialchars($r['Schedule'] ?? 'Not set'); ?></p>
-                                    </div>
-                                </div>
+            <h2 class="mb-4">Completed Requests</h2>
+            <div class="row row-cols-1 row-cols-md-2 g-4">
+                <?php if (is_array($completed_requests) && count($completed_requests) > 0): ?>
+                <?php foreach ($completed_requests as $r): ?>
+                    <div class="col">
+                    <div class="card">
+                        <div class="card-header d-flex justify-content-between align-items-center px-3 py-2"
+                            style="background-color: <?php echo getStatusColor($r['Status'] ?? ''); ?>; color:#fff;">
+                        <strong>✅ <?php echo htmlspecialchars($r['Status'] ?? 'Completed'); ?></strong>
+                        <small>
+                            <?php
+                            $raw = $r['Schedule'] ?? null;
+                            if ($raw && preg_match('/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/', $raw)) {
+                                $dt = DateTime::createFromFormat('Y-m-d\TH:i', $raw);
+                                echo htmlspecialchars($dt ? $dt->format('F j, Y • g:i A') : 'Not set');
+                            } else {
+                                echo htmlspecialchars($raw ?: 'Not set');
+                            }
+                            ?>
+                        </small>
+                        </div>
+
+                        <div class="card-body">
+                        <div class="d-flex align-items-center mb-3">
+                            <?php if (!empty($r['Avatar'])): ?>
+                            <img src="<?php echo htmlspecialchars($r['Avatar']); ?>"
+                                alt="Avatar"
+                                class="rounded-circle me-2"
+                                style="width:40px;height:40px;object-fit:cover;">
+                            <?php else: ?>
+                            <div class="rounded-circle bg-secondary text-white d-flex align-items-center justify-content-center me-2"
+                                style="width:40px;height:40px;">
+                                <?php echo strtoupper(substr($r['FName'] ?? '?',0,1)); ?>
                             </div>
-                        <?php endforeach; ?>
-                    <?php else: ?>
-                        <div class="alert alert-info" role="alert">No completed requests.</div>
-                    <?php endif; ?>
-                </div>
+                            <?php endif; ?>
+                            <h6 class="mb-0">
+                            <?php echo htmlspecialchars(trim(($r['FName'] ?? '') . ' ' . ($r['LName'] ?? ''))) ?: 'Unknown Client'; ?>
+                            </h6>
+                        </div>
+
+                        <div class="d-flex justify-content-between align-items-center mb-3">
+                            <h5 class="card-title"><?php echo htmlspecialchars($r['SkillName'] ?? 'Unnamed Skill'); ?></h5>
+                            <span class="badge"
+                                style="background-color: <?php echo getStatusColor($r['Status'] ?? ''); ?>">
+                            <?php echo htmlspecialchars($r['Status'] ?? 'Completed'); ?>
+                            </span>
+                        </div>
+
+                        <p class="card-text"><strong>Client:</strong>
+                            <?php echo htmlspecialchars(trim(($r['FName'] ?? '') . ' ' . ($r['LName'] ?? ''))) ?: 'Unknown Client'; ?>
+                        </p>
+
+                        <p class="card-text"><strong>Location:</strong>
+                            <?php echo htmlspecialchars($r['Location'] ?? 'Unknown'); ?>
+                        </p>
+
+                        <p class="card-text"><strong>Schedule:</strong>
+                            <?php
+                            $raw = $r['Schedule'] ?? null;
+                            if ($raw && preg_match('/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/', $raw)) {
+                                $dt = DateTime::createFromFormat('Y-m-d\TH:i', $raw);
+                                echo htmlspecialchars($dt ? $dt->format('F j, Y • g:i A') : 'Not set');
+                            } else {
+                                echo htmlspecialchars($raw ?: 'Not set');
+                            }
+                            ?>
+                        </p>
+                        </div>
+                    </div>
+                    </div>
+                <?php endforeach; ?>
+                <?php else: ?>
+                <div class="alert alert-info" role="alert">No completed requests.</div>
+                <?php endif; ?>
+            </div>
             </section>
+
 
             <!-- Cancelled Requests -->
             <section id="requestSection-cancelled" class="request-section">
-                <h2 class="mb-4">Cancelled Requests</h2>
-                <div class="row row-cols-1 row-cols-md-2 g-4">
-                    <?php if (is_array($cancelled_requests) && count($cancelled_requests) > 0): ?>
-                        <?php foreach ($cancelled_requests as $r): ?>
-                            <div class="col">
-                                <div class="card">
-                                    <div class="card-body">
-                                        <div class="d-flex justify-content-between align-items-center mb-3">
-                                            <h5 class="card-title"><?php echo htmlspecialchars($r['SkillName'] ?? 'Unnamed Skill'); ?></h5>
-                                            <span class="badge" style="background-color: <?php echo getStatusColor($r['Status'] ?? ''); ?>">
-                                                <?php echo htmlspecialchars($r['Status'] ?? 'Unknown'); ?>
-                                            </span>
-                                        </div>
-                                        <p class="card-text"><strong>Client:</strong> <?php echo htmlspecialchars(trim(($r['FName'] ?? '') . ' ' . ($r['LName'] ?? ''))) ?: 'Unknown Client'; ?></p>
-                                        <p class="card-text"><strong>Location:</strong> <?php echo htmlspecialchars($r['Location'] ?? 'Unknown'); ?></p>
-                                        <p class="card-text"><strong>Schedule:</strong> <?php echo htmlspecialchars($r['Schedule'] ?? 'Not set'); ?></p>
-                                    </div>
-                                </div>
+            <h2 class="mb-4">Cancelled Requests</h2>
+            <div class="row row-cols-1 row-cols-md-2 g-4">
+                <?php if (is_array($cancelled_requests) && count($cancelled_requests) > 0): ?>
+                <?php foreach ($cancelled_requests as $r): ?>
+                    <div class="col">
+                    <div class="card">
+                        <div class="card-header d-flex justify-content-between align-items-center px-3 py-2"
+                            style="background-color: <?php echo getStatusColor($r['Status'] ?? ''); ?>; color:#fff;">
+                        <strong>❌ <?php echo htmlspecialchars($r['Status'] ?? 'Cancelled'); ?></strong>
+                        <small>
+                            <?php
+                            $raw = $r['Schedule'] ?? null;
+                            if ($raw && preg_match('/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/', $raw)) {
+                                $dt = DateTime::createFromFormat('Y-m-d\TH:i', $raw);
+                                echo htmlspecialchars($dt ? $dt->format('F j, Y • g:i A') : 'Not set');
+                            } else {
+                                echo htmlspecialchars($raw ?: 'Not set');
+                            }
+                            ?>
+                        </small>
+                        </div>
+
+                        <div class="card-body">
+                        <div class="d-flex align-items-center mb-3">
+                            <?php if (!empty($r['Avatar'])): ?>
+                            <img src="<?php echo htmlspecialchars($r['Avatar']); ?>"
+                                alt="Avatar"
+                                class="rounded-circle me-2"
+                                style="width:40px;height:40px;object-fit:cover;">
+                            <?php else: ?>
+                            <div class="rounded-circle bg-secondary text-white d-flex align-items-center justify-content-center me-2"
+                                style="width:40px;height:40px;">
+                                <?php echo strtoupper(substr($r['FName'] ?? '?',0,1)); ?>
                             </div>
-                        <?php endforeach; ?>
-                    <?php else: ?>
-                        <div class="alert alert-info" role="alert">No cancelled requests.</div>
-                    <?php endif; ?>
-                </div>
+                            <?php endif; ?>
+                            <h6 class="mb-0">
+                            <?php echo htmlspecialchars(trim(($r['FName'] ?? '') . ' ' . ($r['LName'] ?? ''))) ?: 'Unknown Client'; ?>
+                            </h6>
+                        </div>
+
+                        <div class="d-flex justify-content-between align-items-center mb-3">
+                            <h5 class="card-title"><?php echo htmlspecialchars($r['SkillName'] ?? 'Unnamed Skill'); ?></h5>
+                            <span class="badge"
+                                style="background-color: <?php echo getStatusColor($r['Status'] ?? ''); ?>">
+                            <?php echo htmlspecialchars($r['Status'] ?? 'Cancelled'); ?>
+                            </span>
+                        </div>
+
+                        <p class="card-text"><strong>Client:</strong>
+                            <?php echo htmlspecialchars(trim(($r['FName'] ?? '') . ' ' . ($r['LName'] ?? ''))) ?: 'Unknown Client'; ?>
+                        </p>
+
+                        <p class="card-text"><strong>Location:</strong>
+                            <?php echo htmlspecialchars($r['Location'] ?? 'Unknown'); ?>
+                        </p>
+
+                        <p class="card-text"><strong>Schedule:</strong>
+                            <?php
+                            $raw = $r['Schedule'] ?? null;
+                            if ($raw && preg_match('/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/', $raw)) {
+                                $dt = DateTime::createFromFormat('Y-m-d\TH:i', $raw);
+                                echo htmlspecialchars($dt ? $dt->format('F j, Y • g:i A') : 'Not set');
+                            } else {
+                                echo htmlspecialchars($raw ?: 'Not set');
+                            }
+                            ?>
+                        </p>
+                        </div>
+                    </div>
+                    </div>
+                <?php endforeach; ?>
+                <?php else: ?>
+                <div class="alert alert-info" role="alert">No cancelled requests.</div>
+                <?php endif; ?>
+            </div>
             </section>
-        </section>
+
                  
 
 
