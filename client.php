@@ -2,11 +2,84 @@
 session_start();
 require "db.php";
 
-// Redirect if not client
-if (!isset($_SESSION['user_id']) || $_SESSION['role'] !== 'client') {
-    header("Location: login.php");
-    exit();
-}
+        if (isset($_GET['ajax']) && $_GET['ajax'] === '1') {
+            header('Content-Type: application/json; charset=utf-8');
+            require_once "db.php";
+
+            if (!isset($_SESSION['user_id']) || $_SESSION['role'] !== 'client') {
+                echo json_encode(['ok' => false, 'error' => 'Unauthorized']);
+                exit;
+            }
+
+            $clientId = $_SESSION['user_id'];
+
+            // === Dashboard Summary ===
+            if (isset($_GET['action']) && $_GET['action'] === 'booking_summary') {
+                $stmt = $conn->prepare("
+                    SELECT Status, COUNT(*) AS Count
+                    FROM request
+                    WHERE ClientID = ?
+                    GROUP BY Status
+                ");
+                $stmt->bind_param("i", $clientId);
+                $stmt->execute();
+                $result = $stmt->get_result();
+
+                $data = [];
+                while ($row = $result->fetch_assoc()) {
+                    $data[$row['Status']] = (int)$row['Count'];
+                }
+
+                echo json_encode(['ok' => true, 'data' => $data]);
+                exit;
+            }
+
+            // === Requests Over Time (monthly) ===
+            if (isset($_GET['action']) && $_GET['action'] === 'requests_over_time') {
+                $filter = $_GET['filter'] ?? 'all';
+
+                $dateCondition = "";
+                if ($filter === 'month') {
+                    $dateCondition = "AND CreatedAt >= DATE_SUB(NOW(), INTERVAL 1 MONTH)";
+                } elseif ($filter === '3months') {
+                    $dateCondition = "AND CreatedAt >= DATE_SUB(NOW(), INTERVAL 3 MONTH)";
+                } elseif ($filter === 'year') {
+                    $dateCondition = "AND CreatedAt >= DATE_SUB(NOW(), INTERVAL 1 YEAR)";
+                }
+
+                $stmt = $conn->prepare("
+                    SELECT DATE_FORMAT(CreatedAt, '%b %Y') AS Month, COUNT(*) AS Count
+                    FROM request
+                    WHERE ClientID = ? $dateCondition
+                    GROUP BY DATE_FORMAT(CreatedAt, '%Y-%m')
+                    ORDER BY MIN(CreatedAt)
+                ");
+                $stmt->bind_param("i", $clientId);
+                $stmt->execute();
+                $result = $stmt->get_result();
+
+                $data = [];
+                while ($row = $result->fetch_assoc()) {
+                    $data[] = ['Month' => $row['Month'], 'Count' => (int)$row['Count']];
+                }
+
+                echo json_encode(['ok' => true, 'data' => $data]);
+                exit;
+            }
+
+            // If no recognized AJAX action
+            echo json_encode(['ok' => false, 'error' => 'Invalid action']);
+            exit;
+
+        } // ✅ ← THIS closes the AJAX block properly!
+
+
+
+        // Redirect if not client
+        if (!isset($_SESSION['user_id']) || $_SESSION['role'] !== 'client') {
+            header("Location: login.php");
+            exit();
+        }
 
 $client_id = $_SESSION['user_id'];
 $client_name = $_SESSION['name'] ?? 'Client';
@@ -31,7 +104,7 @@ if (isset($_POST['book_skill_id'])) {
         $insert->execute();
 
         // 🚀 Redirect to avoid resubmission and go to requests tab
-        header("Location: client.php?success=1§ion=request");
+        header("Location: client.php?success=1&section=request");
         exit();
     }
 }
@@ -108,14 +181,16 @@ function getStatusColor($status) {
   <title>Client Dashboard | SkillConnect</title>
   <link rel="stylesheet" href="styles/client.css" />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap" rel="stylesheet">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 </head>
 <body>
 
 <header class="top-nav">
     <div class="logo"><img src="imge/logo-.png" alt="">SkillConnect</div>
     <nav class="nav-links">
-        <a href="#" id="browseLink" class="active">Browse Services</a>
-        <a href="#" id="requestsLink">My Requests</a>
+         <a href="#" id="dashboardLink" class="active">Dashboard</a>
+            <a href="#" id="browseLink">Browse Services</a>
+            <a href="#" id="requestsLink">My Requests</a>
     </nav>
     <div class="profile-dropdown">
       <span class="user-name">Hi, <?php echo htmlspecialchars($client_name); ?></span>
@@ -123,31 +198,58 @@ function getStatusColor($status) {
     </div>
 </header>
 
-<main class="dashboard-container">
+        <main class="dashboard-container">
+            <section id="dashboardSection" class="active">
+            <h2 class="mb-4">Dashboard</h2>
 
-    <?php if (isset($_GET['success']) && $_GET['success'] == 1): ?>
-    <div class="success-message">✅ Service booked successfully!</div>
-    <script>
-      setTimeout(() => {
-        document.querySelector('.success-message')?.classList.add('fade-out');
-      }, 3000);
+            <div class="row g-3">
+                <div class="col-md-4">
+                    <div class="card text-center shadow-sm border-0 p-3">
+                        <h5 class="text-muted">Pending Requests</h5>
+                        <h2 id="pendingCount" class="text-warning fw-bold">0</h2>
+                    </div>
+                        </div>
+                        <div class="col-md-4">
+                    <div class="card text-center shadow-sm border-0 p-3">
+                        <h5 class="text-muted">In Progress</h5>
+                            <h2 id="inProgressCount" class="text-info fw-bold">0</h2>
+                        </div>
+                        </div>
+                    <div class="col-md-4">
+                    <div class="card text-center shadow-sm border-0 p-3">
+                        <h5 class="text-muted">Completed</h5>
+                        <h2 id="completedCount" class="text-success fw-bold">0</h2>
+                    </div>
+                </div>
+            </div>
 
-      // Clean success from URL
-      if (window.history.replaceState) {
-        const url = new URL(window.location);
-        url.searchParams.delete('success');
-        window.history.replaceState({}, document.title, url);
-      }
+            <div class="card mt-4 shadow-sm border-0">
+                <div class="card-body">
+                <h5 class="card-title mb-3">Requests Over Time</h5>
+                <div class="filter-controls" style="margin-bottom: 1rem;">
+                    <label for="dashboardFilter" style="font-weight:600; margin-right:0.5rem;">Filter:</label>
+                        <select id="dashboardFilter" style="padding:0.3rem 0.6rem; border-radius:6px; border:1px solid #ccc;">
+                            <option value="all" selected>All Time</option>
+                            <option value="month">This Month</option>
+                            <option value="3months">Last 3 Months</option>
+                            <option value="year">This Year</option>
+                        </select>
+                </div>
 
-      // Switch to Requests tab
-      document.addEventListener("DOMContentLoaded", () => {
-        document.getElementById("requestsLink").click();
-      });
-    </script>
-    <?php endif; ?>
+                <canvas id="requestsOverTimeChart" height="120"></canvas>
+                </div>
+            </div>
+        </section>
+
+
+        <?php if (isset($_GET['success']) && $_GET['success'] == 1): ?>
+        <div class="success-message">✅ Service booked successfully!</div>
+        <?php endif; ?>
+
+
 
     <!-- Browse Providers -->
-    <section id="browseSection" class="active">
+    <section id="browseSection">
         <h2>Browse Services</h2>
         <div class="provider-grid">
             <?php while($p = $providers->fetch_assoc()): ?>
@@ -183,6 +285,18 @@ function getStatusColor($status) {
     <!-- My Requests -->
     <section id="requestSection">
         <h2>My Service Requests</h2>
+
+        <div class="filter-bar" id="activeFilters" style="display:none;">
+            <input type="text" id="requestSearch" placeholder="Search by provider or service..." />
+            <select id="statusFilter">
+                <option value="all">All Statuses</option>
+                <option value="Pending">Pending</option>
+                <option value="Confirmed">Confirmed</option>
+                <option value="In Progress">In Progress</option>
+            </select>
+        </div>
+
+
 
         <!-- Add above the requests section -->
         <div class="request-tabs">
@@ -420,15 +534,9 @@ function getStatusColor($status) {
 </div>
 
 <script src="js/client.js"></script>
-<script>
-  document.querySelectorAll('.tab-btn').forEach(btn => {
-      btn.addEventListener('click', function() {
-          document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
-          this.classList.add('active');
-          document.querySelectorAll('.request-section').forEach(sec => sec.classList.remove('active'));
-          document.getElementById('requestSection-' + this.dataset.tab).classList.add('active');
-      });
-  });
-</script>
+<script src="js/requestFilters.js"></script>
+<script src="js/alerts.js"></script>
+
+
 </body>
 </html>

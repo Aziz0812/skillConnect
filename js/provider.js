@@ -1,9 +1,33 @@
 document.addEventListener('DOMContentLoaded', () => {
+  console.log("✅ DOM fully loaded — checking skill_added...");
+
+  //  Force Skills Section BEFORE section logic runs
+  if (window.location.search.includes('skill_added=1')) {
+      console.log("🎯 Skill added redirect — forcing skills section");
+      showSection(skillsSection);
+      localStorage.setItem('activeSection', skillsSection.id);
+      window.location.hash = '#skills-section';
+
+      //  Clean URL so it won’t repeat next load
+      const cleanUrl = window.location.pathname + "#skills-section";
+      window.history.replaceState({}, '', cleanUrl);
+
+      return; //  Prevent dashboard fallback logic from running
+  }
+  
   if (window.location.search) {
   window.history.replaceState({}, document.title, window.location.pathname + "#skills-section");
 }
 
-  
+  //  Detect if redirected after adding a skill
+if (window.location.search.includes('skill_added=1')) {
+  document.dispatchEvent(new Event('skill-added'));
+
+  //  Clean the URL after handling
+  const cleanUrl = window.location.pathname + "#skills-section";
+  window.history.replaceState({}, '', cleanUrl);
+}
+
   console.log('provider.js loaded âœ…');
 
   // ----------------------------
@@ -46,15 +70,65 @@ document.addEventListener('DOMContentLoaded', () => {
         }
       });
     });
+    
 
     // initial state
     jobSections.forEach(sec => {
       sec.style.display = sec.id === 'requestSection-active' ? 'block' : 'none';
       sec.style.opacity = sec.id === 'requestSection-active' ? 1 : 0;
     });
+   
+    
 
 
   const allSections = [dashboardSection, postServiceSection, skillsSection, jobsSection];
+  
+  // --- HASH / REDIRECT HANDLER (ensures correct section after PHP redirect) ---
+    function showSectionByHash() {
+      const hash = window.location.hash || '#dashboard-section';
+
+      const sections = {
+        '#dashboard-section': dashboardSection,
+        '#add-skill': postServiceSection,
+        '#skills-section': skillsSection,
+        '#jobs-section': jobsSection
+      };
+
+      // Hide all first
+      allSections.forEach(sec => {
+        if (sec) {
+          sec.style.display = 'none';
+          sec.classList.remove('active');
+        }
+      });
+
+      // Reset nav states
+      document.querySelectorAll('.navbar-nav .nav-link')
+        .forEach(link => link.classList.remove('active'));
+
+      // Show matched section (fallback to dashboard if unknown)
+      const target = sections[hash] || dashboardSection;
+      if (target) {
+        target.style.display = 'block';
+        target.classList.add('active');
+
+        // Activate proper nav link
+        const activeLink = document.querySelector(`a[href="${hash}"]`);
+        if (activeLink) activeLink.classList.add('active');
+
+        // Ensure we don't jump unexpectedly if already visible
+        if (document.visibilityState === 'visible') {
+          target.scrollIntoView({ behavior: 'auto' });
+        }
+      }
+    }
+
+// Run once on load to respect any server-side redirect like provider.php?job_updated=1#jobs-section
+showSectionByHash();
+
+// Also handle manual / browser hash changes
+window.addEventListener('hashchange', showSectionByHash);
+
 
   const categorySelect = document.getElementById('category');
   const otherCategoryGroup = document.getElementById('otherCategoryGroup');
@@ -114,14 +188,8 @@ document.addEventListener('DOMContentLoaded', () => {
         if (counter) counter.textContent = `${e.target.value.length}/500 characters`;
       });
 
-      // Rate live update (extends your existing preview)
-      rateInput?.addEventListener('input', e => {
-        const rate = parseFloat(e.target.value);
-        previewRate.textContent = isNaN(rate)
-          ? '—'
-          : `₱${Math.round(rate)}/hour`;
+  
 
-      });
 
       // Image live preview
       const imageInput = document.getElementById('serviceImage');
@@ -194,20 +262,43 @@ document.addEventListener('DOMContentLoaded', () => {
 
     
 
-  // --- RATE PREVIEW ---
-  if (rateInput && ratePreview) {
-    rateInput.addEventListener('input', () => {
-      const rate = parseFloat(rateInput.value);
-      if (isNaN(rate) || rate <= 0) {
-        ratePreview.textContent = 'Please enter a valid positive rate.';
-        ratePreview.style.color = 'red';
-      } else {
-        ratePreview.textContent = `₱${rate.toFixed(2)}/hour`;
-        ratePreview.style.color = 'green';
-      }
-    });
-    ratePreview.textContent = 'Enter rate above';
-  }
+      // --- RATE PREVIEW (with rate type) ---
+    const rateTypeRadios = document.querySelectorAll('input[name="rate_type"]');
+
+    if (rateInput && ratePreview && rateTypeRadios.length > 0) {
+            const updateRatePreview = () => {
+        const rate = parseFloat(rateInput.value);
+        const selectedType = document.querySelector('input[name="rate_type"]:checked')?.value || 'hourly';
+        let unitLabel = '';
+
+        switch (selectedType) {
+          case 'daily': unitLabel = '/day'; break;
+          case 'fixed': unitLabel = ' (total)'; break;
+          default: unitLabel = '/hour';
+        }
+
+        // --- Update both small text and live preview badge ---
+        if (isNaN(rate) || rate <= 0) {
+          ratePreview.textContent = 'Please enter a valid positive rate.';
+          previewRate.textContent = '₱0/hr';
+          ratePreview.style.color = 'red';
+          previewRate.style.color = 'gray';
+        } else {
+          const display = `₱${rate.toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}${unitLabel}`;
+          ratePreview.textContent = display;
+          previewRate.textContent = display;
+          ratePreview.style.color = 'green';
+          previewRate.style.color = 'green';
+        }
+      };
+
+
+      rateInput.addEventListener('input', updateRatePreview);
+      rateTypeRadios.forEach(radio => radio.addEventListener('change', updateRatePreview));
+
+      ratePreview.textContent = 'Enter rate above';
+    }
+
 
   // --- AUTO-HIDE ALERT MESSAGES ---
   document.querySelectorAll('.success-message, .error-message').forEach(msg => {
@@ -263,24 +354,75 @@ document.addEventListener('DOMContentLoaded', () => {
   if (skillsLink) skillsLink.addEventListener('click', e => handleNavClick(e, skillsSection, '#skills-section'));
   if (jobsLink) jobsLink.addEventListener('click', e => handleNavClick(e, jobsSection, '#jobs-section'));
   if (addSkillFirst) addSkillFirst.addEventListener('click', e => handleNavClick(e, postServiceSection, '#add-skill'));
+      // After adding a skill → redirect to My Skills to view
+      document.addEventListener('skill-added', () => {
+        showSection(skillsSection);
+        location.hash = '#skills-section';
+        localStorage.setItem('activeSection', skillsSection.id);
+      });
 
-  // --- DEFAULT SECTION / HASH RESTORE ---
-  const savedSectionId = localStorage.getItem('activeSection');
-  const savedSection = savedSectionId ? document.getElementById(savedSectionId) : null;
+      // ✅ If just redirected after adding a skill, set correct section BEFORE init runs
+      if (window.location.search.includes('skill_added=1')) {
 
-  if (savedSection) showSection(savedSection);
-  else if (dashboardSection) showSection(dashboardSection);
+        // Force correct UI state first
+        localStorage.setItem('activeSection', 'skills-section');
+        window.location.hash = '#skills-section';
 
+        // ✅ Optional: clean URL on next load
+        setTimeout(() => {
+          const cleanUrl = window.location.pathname + "#skills-section";
+          window.history.replaceState({}, '', cleanUrl);
+        }, 500);
+      }
+if (window.location.search.includes('updated=1') ||
+    window.location.search.includes('deleted=1')) {
+    showSection(skillsSection);
+    localStorage.setItem('activeSection', skillsSection.id);
+    window.location.hash = '#skills-section';
+}
+
+
+  // --- DEFAULT SECTION / HASH RESTORE (final fixed version) ---
+  (function initSectionFromHashOrStorage() {
+    const hash = window.location.hash;
+
+    // 1️⃣ If a hash exists (like #jobs-section), show that section
+    if (hash) {
+      const target = document.querySelector(hash);
+      if (target) {
+        showSection(target);
+        localStorage.setItem('activeSection', target.id);
+        console.log("✅ Loaded section from hash:", hash);
+        return;
+      }
+    }
+
+    // 2️⃣ Otherwise, restore from localStorage or default to dashboard
+    const savedId = localStorage.getItem('activeSection');
+    const saved = savedId ? document.getElementById(savedId) : null;
+
+    if (saved) {
+      showSection(saved);
+      console.log("ℹ️ Restored section from storage:", savedId);
+    } else if (dashboardSection) {
+      showSection(dashboardSection);
+      console.log("➡️ Defaulted to dashboard");
+    }
+  })();
+
+  // 🔁 Handle browser navigation and redirects correctly
   window.addEventListener('hashchange', () => {
-    const hash = window.location.hash.substring(1);
-    const targetSection = document.getElementById(hash);
-    if (targetSection) showSection(targetSection);
+    const hash = window.location.hash;
+    const target = hash ? document.querySelector(hash) : null;
+
+    if (target) {
+      showSection(target);
+      localStorage.setItem('activeSection', target.id);
+      console.log("🔁 Hash changed to:", hash);
+    }
   });
 
-  if (window.location.hash) {
-    const initialSection = document.getElementById(window.location.hash.substring(1));
-    if (initialSection) showSection(initialSection);
-  }
+
 
   // ======================================================
   //                AVAILABILITY MANAGEMENT
@@ -539,28 +681,105 @@ document.addEventListener('DOMContentLoaded', () => {
         statusCtx.canvas.parentElement.innerHTML += '<div class="text-danger text-center mt-2">Failed to load chart data.</div>';
       }
     }
-    // --- SEARCH & FILTER LOGIC (auto-clear + reset when opening My Skills) ---
-      const searchInput = document.getElementById("searchSkill");
-      const categorySelect = document.getElementById("filterCategory");
-      const skillsLink = document.getElementById("skillsLink");
+   
+      // ======================================================
+      //     LOAD TOP 3 MOST BOOKED SKILLS WIDGET
+      // ======================================================
+      const topSkillsContainer = document.getElementById('topSkillsContainer');
+      if (topSkillsContainer) {
+        const topRes = await fetchJSON(`${base}&action=top_skills`);
+        console.log('Top Skills:', topRes);
 
-      // clear search when category changes
-      if (categorySelect && searchInput) {
-        categorySelect.addEventListener("change", () => {
-          searchInput.value = "";
-        });
+        if (topRes.ok && topRes.data.length > 0) {
+          const listHTML = topRes.data.map(
+            (s, i) => `
+              <div class="d-flex justify-content-between align-items-center border-bottom py-2">
+                <span><strong>${i + 1}.</strong> ${s.SkillName}</span>
+                <span class="badge bg-primary">${s.TotalBookings} Bookings</span>
+              </div>`
+          ).join('');
+
+          topSkillsContainer.innerHTML = `<div>${listHTML}</div>`;
+        } else {
+          topSkillsContainer.innerHTML = `
+            <div class="text-muted text-center">No bookings yet.</div>
+          `;
+        }
       }
 
-          // reset both and reload clean URL when opening My Skills tab
-    if (skillsLink) {
-      skillsLink.addEventListener("click", (e) => {
-        e.preventDefault(); // stop normal anchor behavior
-        // go to base page without any ?filter or ?search params
-        window.location.replace(window.location.origin + window.location.pathname + "#skills-section");
-
-      });
-    }
 
   }
-  
+// ======================================================
+//            SEARCH & FILTER LOGIC (GLOBAL)
+// ======================================================
+const skillsFilterForm = document.getElementById('skillsFilterForm');
+const skillsSearchInput = document.getElementById('searchSkill');
+const filterCategorySelect = document.getElementById('filterCategory');
+const clearFiltersBtn = document.getElementById('clearFilters');
+
+// 1) Clear search text whenever a category is chosen
+if (filterCategorySelect && skillsSearchInput) {
+  filterCategorySelect.addEventListener('change', () => {
+    skillsSearchInput.value = '';
+  });
+}
+
+// 2) Clicking "My Skills" → reset filters and clean URL
+  if (skillsLink) {
+    skillsLink.addEventListener('click', e => {
+      e.preventDefault();
+      showSection(skillsSection);
+      location.hash = '#skills-section';
+      localStorage.setItem('activeSection', skillsSection.id);
+    });
+  }
+
+
+// 3) Clear button: reset form fields AND reload cleanly
+if (clearFiltersBtn) {
+  clearFiltersBtn.addEventListener('click', (e) => {
+    e.preventDefault();
+    console.log('[Clear] clicked');
+
+    if (skillsFilterForm) skillsFilterForm.reset();
+    if (skillsSearchInput) skillsSearchInput.value = '';
+    if (filterCategorySelect) filterCategorySelect.value = '';
+
+    // ✅ Force clean PHP reload
+    window.location.href = window.location.pathname;
+  });
+}
+
+document.querySelectorAll('.toast').forEach(toastEl => {
+        new bootstrap.Toast(toastEl, { delay: 4000 }).show();
+    });
+
+  // ===================
+  // TOAST HANDLER
+  // ===================
+  function showToast(message, type = 'success') {
+      const toastArea = document.getElementById('toast-area');
+      if (!toastArea) return;
+
+      const toast = document.createElement('div');
+      toast.className = `toast align-items-center text-bg-${type} border-0 show mb-2`;
+      toast.role = "alert";
+      toast.innerHTML = `
+          <div class="d-flex">
+              <div class="toast-body">${message}</div>
+              <button type="button" class="btn-close btn-close-white me-2 m-auto" 
+                  data-bs-dismiss="toast"></button>
+          </div>
+      `;
+
+      toastArea.appendChild(toast);
+
+      const bsToast = new bootstrap.Toast(toast, { delay: 4000 });
+      bsToast.show();
+  }
+
+  // ✅ Automatically show messages passed from PHP
+  if (window.success_message) showToast(window.success_message, 'success');
+  if (window.error_message) showToast(window.error_message, 'danger');
+
 });

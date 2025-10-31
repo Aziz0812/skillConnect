@@ -1,7 +1,7 @@
 body {
   font-family: 'Inter', sans-serif;
   margin: 0;
-  background-color: #f9fbfc;
+  background-color: #f8f9fa;
   color: #333;
 }
 
@@ -324,6 +324,9 @@ input[type=number] {
   color: #007bff;
   margin-bottom: 1.2rem;
 }
+.add-skill .card {
+    border-radius: 1rem;
+  }
 
 .input-with-icon {
   display: flex;
@@ -514,3 +517,4 @@ input[type=number] {
   transform: translateY(-3px);
   box-shadow: 0 8px 18px rgba(0,0,0,0.15);
 }
+

@@ -1,6 +1,52 @@
 <?php
 session_start();
+require 'db.php';
+// ✅ If user is already logged in (session active), redirect to dashboard immediately
+if (isset($_SESSION['user_id']) && isset($_SESSION['role'])) {
+    if ($_SESSION['role'] === 'provider') {
+        header("Location: provider.php");
+        exit();
+    } elseif ($_SESSION['role'] === 'client') {
+        header("Location: client.php");
+        exit();
+    }
+}
+
+
+// ✅ Auto-login using remember_token (same logic as provider.php)
+if (!isset($_SESSION['user_id']) && isset($_COOKIE['remember_token'])) {
+    $token = $_COOKIE['remember_token'];
+    $stmt = $conn->prepare("SELECT ID, Role, FName, LName, remember_expiry FROM users WHERE remember_token = ? LIMIT 1");
+    $stmt->bind_param("s", $token);
+    $stmt->execute();
+    $result = $stmt->get_result();
+
+    if ($user = $result->fetch_assoc()) {
+        if ((int)$user['remember_expiry'] > time()) {
+            // ✅ Restore session
+            $_SESSION['user_id'] = $user['ID'];
+            $_SESSION['role'] = $user['Role'];
+            $_SESSION['FName'] = $user['FName'];
+            $_SESSION['LName'] = $user['LName'];
+            $_SESSION['name'] = $user['FName'] . ' ' . $user['LName'];
+
+            // ✅ Redirect user automatically to their dashboard
+            if ($user['Role'] === 'provider') {
+                header("Location: provider.php");
+                exit();
+            } elseif ($user['Role'] === 'client') {
+                header("Location: client.php");
+                exit();
+            }
+        } else {
+            // ❌ Token expired
+            setcookie('remember_token', '', time() - 3600, '/');
+        }
+    }
+    $stmt->close();
+}
 ?>
+
 <!DOCTYPE html>
 <html lang="en">
 <head>
