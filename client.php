@@ -67,6 +67,67 @@ require "db.php";
                 exit;
             }
 
+            // ===== START: AJAX Search Skills =====
+            if (isset($_GET['action']) && $_GET['action'] === 'search_skills') {
+                $search = trim($_GET['q'] ?? '');
+                $category = $_GET['category'] ?? '';
+                $params = [];
+                $types = '';
+
+                $sql = "
+                    SELECT 
+                        s.SkillID,
+                        COALESCE(sc.CategoryName, s.CustomCategory, 'Uncategorized') AS SkillName,
+                        s.Description,
+                        s.Rate,
+                        u.FName,
+                        u.LName,
+                        u.Location
+                    FROM skills s
+                    JOIN users u ON s.UserID = u.ID
+                    LEFT JOIN skill_categories sc ON s.CategoryID = sc.CategoryID
+                    WHERE u.Role = 'provider'
+                ";
+
+                // 🔍 Search text across name, skill, location
+                if ($search !== '') {
+                    $sql .= " AND (
+                        sc.CategoryName LIKE CONCAT('%', ?, '%') OR
+                        s.CustomCategory LIKE CONCAT('%', ?, '%') OR
+                        u.FName LIKE CONCAT('%', ?, '%') OR
+                        u.LName LIKE CONCAT('%', ?, '%') OR
+                        u.Location LIKE CONCAT('%', ?, '%')
+                    )";
+                    $params = array_merge($params, array_fill(0, 5, $search));
+                    $types .= str_repeat('s', 5);
+                }
+
+                // 🎯 Optional category filter
+                if ($category !== '' && $category !== 'all') {
+                    $sql .= " AND (sc.CategoryID = ? OR s.CustomCategory = ?)";
+                    $params[] = $category;
+                    $params[] = $category;
+                    $types .= 'ss';
+                }
+
+                $sql .= " ORDER BY SkillName, u.FName";
+
+                $stmt = $conn->prepare($sql);
+                if ($params) $stmt->bind_param($types, ...$params);
+                $stmt->execute();
+                $res = $stmt->get_result();
+
+                $skills = [];
+                while ($row = $res->fetch_assoc()) {
+                    $skills[] = $row;
+                }
+
+                echo json_encode(['ok' => true, 'data' => $skills]);
+                exit;
+            }
+            // ===== END: AJAX Search Skills =====
+
+
             // If no recognized AJAX action
             echo json_encode(['ok' => false, 'error' => 'Invalid action']);
             exit;
@@ -109,16 +170,27 @@ if (isset($_POST['book_skill_id'])) {
     }
 }
 
-// Providers & skills
-$query = "
-    SELECT s.SkillID, sc.CategoryName AS SkillName, s.Description, s.Rate, u.FName, u.LName, u.Location
-    FROM skills s
-    JOIN users u ON s.UserID = u.ID
-    JOIN skill_categories sc ON s.CategoryID = sc.CategoryID
-    WHERE u.Role = 'provider'
-    ORDER BY sc.CategoryName, u.FName
-";
-$providers = $conn->query($query);
+    // Providers & skills (including uncategorized / other)
+        $query = "
+            SELECT 
+                s.SkillID,
+                COALESCE(sc.CategoryName, s.CustomCategory, 'Uncategorized') AS SkillName,
+                s.Description,
+                s.Rate,
+                u.FName,
+                u.LName,
+                u.Location,
+                u.City,
+                u.Province,
+                u.Barangay
+            FROM skills s
+            JOIN users u ON s.UserID = u.ID
+            LEFT JOIN skill_categories sc ON s.CategoryID = sc.CategoryID
+            WHERE u.Role = 'provider'
+            ORDER BY SkillName, u.FName
+        ";
+        $providers = $conn->query($query);
+
 
 // Client requests with enhanced data
 // Client requests
@@ -248,38 +320,73 @@ function getStatusColor($status) {
 
 
 
+
+
     <!-- Browse Providers -->
     <section id="browseSection">
         <h2>Browse Services</h2>
-        <div class="provider-grid">
-            <?php while($p = $providers->fetch_assoc()): ?>
-                <div class="provider-card">
-                    <div class="provider-header">
-                        <h3><?php echo htmlspecialchars($p['FName'] . " " . $p['LName']); ?></h3>
-                        <span class="category-badge"><?php echo htmlspecialchars($p['SkillName']); ?></span>
-                    </div>
-                    
-                    <div class="provider-details">
-                        <p><strong>Location:</strong> <?php echo htmlspecialchars($p['Location']); ?></p>
-                        <p class="rate-highlight"><strong>Rate:</strong> PHP <?php echo number_format($p['Rate'], 2); ?>/hour</p>
-                    </div>
 
-                    <p class="card-description"><?php echo htmlspecialchars($p['Description']); ?></p>
-
-                    <div class="card-actions">
-                        <button class="btn-secondary read-more-btn" 
-                                data-description="<?php echo htmlspecialchars($p['Description']); ?>">
-                            Read More
-                        </button>
-                        <form method="POST" class="book-form ajax-book-form" style="display:inline;">
-                            <input type="hidden" name="book_skill_id" value="<?php echo $p['SkillID']; ?>">
-                            <input type="datetime-local" name="preferred_schedule" required>
-                            <button type="submit" class="btn-primary book-btn">Book Now</button>
-                        </form>
-                    </div>
-                </div>
-            <?php endwhile; ?>
+                <!-- ===== START: Browse Services Controls ===== -->
+        <div id="browse-filters" style="margin-bottom: 1rem;">
+        <input type="text" id="searchBox" placeholder="Search skills, providers, or location" style="padding:5px; width:60%;">
+        <select id="categoryFilter" style="padding:5px;">
+            <option value="all">All Categories</option>
+            <?php
+            $cats = $conn->query("SELECT CategoryName FROM skill_categories ORDER BY CategoryName");
+            while ($c = $cats->fetch_assoc()) {
+                echo '<option value="'.htmlspecialchars($c['CategoryName']).'">'.htmlspecialchars($c['CategoryName']).'</option>';
+            }
+            ?>
+            <option value="Other">Other / Custom</option>
+        </select>
         </div>
+        
+
+        <div id="servicesContainer">
+        
+        </div>
+
+            <div class="provider-grid">
+                <?php while($p = $providers->fetch_assoc()): ?>
+                    <div class="provider-card"
+                        data-city="<?= htmlspecialchars($p['City'] ?? '') ?>"
+                        data-province="<?= htmlspecialchars($p['Province'] ?? '') ?>"
+                        data-barangay="<?= htmlspecialchars($p['Barangay'] ?? '') ?>">
+
+                        <div class="provider-header">
+                            <h3><?= htmlspecialchars(($p['FName'] ?? '') . ' ' . ($p['LName'] ?? '')); ?></h3>
+                            <span class="category-badge"><?= htmlspecialchars($p['SkillName'] ?? 'Other'); ?></span>
+                        </div>
+                        
+                        <div class="provider-details">
+                            <p><strong>Location:</strong>
+                                <?= htmlspecialchars(trim(sprintf('%s%s%s',
+                                    ($p['Barangay'] ?? '') ? ($p['Barangay'] . ', ') : '',
+                                    ($p['City'] ?? '') ? ($p['City'] . ', ') : '',
+                                    ($p['Province'] ?? '') ? $p['Province'] : ''
+                                )) ?: ($p['Location'] ?? 'Unknown')); ?>
+                            </p>
+
+                            <p class="rate-highlight"><strong>Rate:</strong> PHP <?= number_format((float)($p['Rate'] ?? 0), 2); ?>/hour</p>
+                        </div>
+
+                        <p class="card-description"><?= htmlspecialchars($p['Description'] ?? ''); ?></p>
+
+                        <div class="card-actions">
+                            <button class="btn-secondary read-more-btn" 
+                                    data-description="<?= htmlspecialchars($p['Description'] ?? ''); ?>">
+                                Read More
+                            </button>
+                            <form method="POST" class="book-form ajax-book-form" style="display:inline;">
+                                <input type="hidden" name="book_skill_id" value="<?= (int)($p['SkillID'] ?? 0); ?>">
+                                <input type="datetime-local" name="preferred_schedule" required>
+                                <button type="submit" class="btn-primary book-btn">Book Now</button>
+                            </form>
+                        </div>
+                    </div>
+                <?php endwhile; ?>
+            </div>
+
     </section>
 
     <!-- My Requests -->
@@ -534,6 +641,7 @@ function getStatusColor($status) {
 </div>
 
 <script src="js/client.js"></script>
+<script src="js/browse.js"></script>
 <script src="js/requestFilters.js"></script>
 <script src="js/alerts.js"></script>
 

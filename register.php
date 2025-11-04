@@ -13,15 +13,24 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
     $location = $_POST['location'];
     $password = password_hash($_POST['password'], PASSWORD_DEFAULT);
 
-    $stmt = $conn->prepare("INSERT INTO users (LName, FName, MName, GMail, Password, Role, Location) VALUES (?, ?, ?, ?, ?, ?, ?)");
-    $stmt->bind_param("sssssss", $lname, $fname, $mname, $email, $password, $role, $location);
+    $city = $_POST['city'];
+    $province = $_POST['province'];
+    $barangay = $_POST['barangay'];
 
-    if ($stmt->execute()) {
-        $message = "Registration successful! <a href='login.php'>Login here</a>";
-    } else {
-        $message = "Error: " . $stmt->error;
-    }
-    $stmt->close();
+    $stmt = $conn->prepare("
+        INSERT INTO users (LName, FName, MName, GMail, Password, Role, City, Province, Barangay)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ");
+    $stmt->bind_param("sssssssss", $lname, $fname, $mname, $email, $password, $role, $city, $province, $barangay);
+
+
+
+        if ($stmt->execute()) {
+            $message = "Registration successful! <a href='login.php'>Login here</a>";
+        } else {
+            $message = "Error: " . $stmt->error;
+        }
+        $stmt->close();
 }
 ?>
 <!DOCTYPE html>
@@ -38,7 +47,10 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
     <input type="text" name="lname" placeholder="Last Name" required><br>
     <input type="text" name="mname" placeholder="Middle Name"><br>
     <input type="email" name="email" placeholder="Email" required><br>
-    <input type="text" name="location" placeholder="Location" required><br>
+    <input type="text" name="location" placeholder="Full Address (Optional)"><br>
+    <input type="text" name="city" placeholder="City" required><br>
+    <input type="text" name="province" placeholder="Province" required><br>
+    <input type="text" name="barangay" placeholder="Barangay" required><br>
     <input type="password" name="password" placeholder="Password" required><br>
     <button type="submit">Register</button>
 </form>

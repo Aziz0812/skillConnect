@@ -88,17 +88,19 @@ if (isset($_COOKIE['remember_token'])) {
                     exit;
                 }
 
-                // Prevent duplicates / overlapping
+              // Prevent duplicates / overlapping (FIXED logic)
                 $check = $conn->prepare("
                     SELECT * FROM provider_availability 
                     WHERE ProviderID = ? 
                     AND DayOfWeek = ?
                     AND (
-                        (StartTime = ? AND EndTime = ?) 
-                        OR (? < EndTime AND ? > StartTime)
+                        (StartTime = ? AND EndTime = ?)
+                        OR (StartTime < ? AND EndTime > ?)
+                        OR (StartTime >= ? AND StartTime < ?)
+                        OR (EndTime > ? AND EndTime <= ?)
                     )
                 ");
-                $check->bind_param("isssss", $pid, $day, $start, $end, $start, $end);
+                $check->bind_param("isssssssss", $pid, $day, $start, $end, $end, $start, $start, $end, $start, $end);
                 $check->execute();
                 $exists = $check->get_result()->num_rows > 0;
 
@@ -324,6 +326,7 @@ if (isset($_COOKIE['remember_token'])) {
             }
 
             // ✅ Finally redirect to EXACT URL we sent
+            
             header("Location: $return_to");
             exit();
         }
@@ -342,14 +345,17 @@ if (isset($_COOKIE['remember_token'])) {
             $description = trim($_POST['description'] ?? '');
             $rate = isset($_POST['rate']) ? floatval($_POST['rate']) : 0;
             $rate_type = $_POST['rate_type'] ?? 'hourly';
+            
+
 
            if ($_POST['category_id'] === 'others' && !empty($custom_category)) {
             // User selected "Other (Specify)" — insert with NULL CategoryID
             $stmt = $conn->prepare("
-                INSERT INTO skills (UserID, CustomCategory, Description, Rate, RateType, ImagePath)
-                VALUES (?, ?, ?, ?, ?, ?)
+                INSERT INTO skills (UserID, CustomCategory, Description, Rate, RateType)
+                VALUES (?, ?, ?, ?, ?)
             ");
-            $stmt->bind_param("issdss", $provider_id, $custom_category, $description, $rate, $rate_type, $image_path);
+            $stmt->bind_param("issds", $provider_id, $custom_category, $description, $rate, $rate_type);
+
 
             if ($stmt->execute()) {
                 $stmt->close();
@@ -888,7 +894,7 @@ if ($my_requests) {
         </div>
         
 
-          <!-- ====== AVAILABILITY SECTION ====== -->
+       <!-- ====== AVAILABILITY SECTION ====== -->
         <div class="card p-3">
             <h5>My Availability</h5>
             <form id="availabilityForm" class="row g-2 mb-3">
@@ -904,14 +910,73 @@ if ($my_requests) {
                     </div>
                 </div>
                 <div class="time-group d-flex flex-column me-2">
-                    <label for="availStart" class="form-label mb-1 fw-semibold">Start Time</label>
-                    <input type="time" name="start_time" id="availStart" class="form-control" required>
-                    <small class="text-muted">Use 12-hour format (e.g. 9:00 AM)</small>
+                    <label for="availStartHour" class="form-label mb-1 fw-semibold">
+                        <i class="bi bi-clock"></i> Start Time
+                    </label>
+                    <div class="d-flex gap-1">
+                        <select id="availStartHour" class="form-select" required style="max-width: 70px;">
+                            <option value="">HH</option>
+                            <option value="01">01</option>
+                            <option value="02">02</option>
+                            <option value="03">03</option>
+                            <option value="04">04</option>
+                            <option value="05">05</option>
+                            <option value="06">06</option>
+                            <option value="07">07</option>
+                            <option value="08" selected>08</option>
+                            <option value="09">09</option>
+                            <option value="10">10</option>
+                            <option value="11">11</option>
+                            <option value="12">12</option>
+                        </select>
+                        <span class="align-self-center">:</span>
+                        <select id="availStartMin" class="form-select" required style="max-width: 70px;">
+                            <option value="00" selected>00</option>
+                            <option value="15">15</option>
+                            <option value="30">30</option>
+                            <option value="45">45</option>
+                        </select>
+                        <select id="startPeriod" class="form-select" required style="max-width: 75px;">
+                            <option value="AM" selected>AM</option>
+                            <option value="PM">PM</option>
+                        </select>
+                    </div>
+                    <small class="text-muted">Select hour, minute, and AM/PM</small>
                 </div>
+
                 <div class="time-group d-flex flex-column me-2">
-                    <label for="availEnd" class="form-label mb-1 fw-semibold">End Time</label>
-                    <input type="time" name="end_time" id="availEnd" class="form-control" required>
-                    <small class="text-muted">Use 12-hour format (e.g. 5:00 PM)</small>
+                    <label for="availEndHour" class="form-label mb-1 fw-semibold">
+                        <i class="bi bi-clock-fill"></i> End Time
+                    </label>
+                    <div class="d-flex gap-1">
+                        <select id="availEndHour" class="form-select" required style="max-width: 70px;">
+                            <option value="">HH</option>
+                            <option value="01">01</option>
+                            <option value="02">02</option>
+                            <option value="03">03</option>
+                            <option value="04">04</option>
+                            <option value="05" selected>05</option>
+                            <option value="06">06</option>
+                            <option value="07">07</option>
+                            <option value="08">08</option>
+                            <option value="09">09</option>
+                            <option value="10">10</option>
+                            <option value="11">11</option>
+                            <option value="12">12</option>
+                        </select>
+                        <span class="align-self-center">:</span>
+                        <select id="availEndMin" class="form-select" required style="max-width: 70px;">
+                            <option value="00" selected>00</option>
+                            <option value="15">15</option>
+                            <option value="30">30</option>
+                            <option value="45">45</option>
+                        </select>
+                        <select id="endPeriod" class="form-select" required style="max-width: 75px;">
+                            <option value="AM">AM</option>
+                            <option value="PM" selected>PM</option>
+                        </select>
+                    </div>
+                    <small class="text-muted">Select hour, minute, and AM/PM</small>
                 </div>
                 <div class="col-12 col-md-2 d-grid">
                     <button type="submit" class="btn btn-primary">Add</button>
@@ -1288,8 +1353,13 @@ if ($my_requests) {
                         </p>
 
                         <p class="card-text"><strong>Location:</strong>
-                            <?php echo htmlspecialchars($r['Location'] ?? 'Unknown'); ?>
-                        </p>
+                            <?php 
+                                    echo htmlspecialchars(
+                                        trim(($r['Barangay'] ?? '') . ', ' . ($r['City'] ?? '') . ', ' . ($r['Province'] ?? ''), ', ')
+                                        ?: 'Unknown'
+                                    ); 
+                                    ?>
+                             </p>
 
                         <p class="card-text"><strong>Schedule:</strong>
                             <?php
@@ -1399,8 +1469,13 @@ if ($my_requests) {
                         </p>
 
                         <p class="card-text"><strong>Location:</strong>
-                            <?php echo htmlspecialchars($r['Location'] ?? 'Unknown'); ?>
-                        </p>
+                            <?php 
+                                echo htmlspecialchars(
+                                    trim(($r['Barangay'] ?? '') . ', ' . ($r['City'] ?? '') . ', ' . ($r['Province'] ?? ''), ', ')
+                                    ?: 'Unknown'
+                                ); 
+                                ?>
+                             </p>
 
                         <p class="card-text"><strong>Schedule:</strong>
                             <?php
@@ -1479,8 +1554,13 @@ if ($my_requests) {
                         </p>
 
                         <p class="card-text"><strong>Location:</strong>
-                            <?php echo htmlspecialchars($r['Location'] ?? 'Unknown'); ?>
-                        </p>
+                            <?php 
+                                echo htmlspecialchars(
+                                    trim(($r['Barangay'] ?? '') . ', ' . ($r['City'] ?? '') . ', ' . ($r['Province'] ?? ''), ', ')
+                                    ?: 'Unknown'
+                                ); 
+                                ?>
+                          </p>
 
                         <p class="card-text"><strong>Schedule:</strong>
                             <?php
