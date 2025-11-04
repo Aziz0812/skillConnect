@@ -13,8 +13,9 @@ document.addEventListener("DOMContentLoaded", () => {
     if (sectionId === "browseSection") document.getElementById("browseLink").classList.add("active");
     if (sectionId === "requestSection") document.getElementById("requestsLink").classList.add("active");
 
+   
     // Save active section
-    localStorage.setItem("activeSection", sectionId);
+    sessionStorage.setItem("activeSection", sectionId);
 
     // Default to Active tab when showing requests
     if (sectionId === "requestSection") {
@@ -77,7 +78,7 @@ document.addEventListener("DOMContentLoaded", () => {
   // === INITIAL SECTION LOAD ===
   const urlParams = new URLSearchParams(window.location.search);
   const sectionFromUrl = urlParams.get("section");
-  const savedSection = sectionFromUrl || localStorage.getItem("activeSection") || "dashboardSection";
+  const savedSection = sectionFromUrl || sessionStorage.getItem("activeSection") || "dashboardSection";
   showSection(savedSection);
 
   // === MODALS ===
@@ -215,7 +216,7 @@ document.addEventListener("DOMContentLoaded", () => {
       btn.disabled = true;
       btn.textContent = "Cancelling...";
 
-      fetch("cancel_request.php", {
+      fetch("client.php?ajax=1&action=cancel_request", {
         method: "POST",
         headers: { "Content-Type": "application/x-www-form-urlencoded" },
         body: "request_id=" + encodeURIComponent(requestId)
@@ -388,10 +389,6 @@ animateCount("completedCount", data.Completed || 0);
       // Destroy old chart if exists
       if (window.clientRequestsChart) window.clientRequestsChart.destroy();
 
-      const chartCanvas = document.getElementById("requestsOverTimeChart");
-      chartCanvas.style.transition = "opacity 0.3s ease";
-      chartCanvas.style.opacity = "0";
-      setTimeout(() => (chartCanvas.style.opacity = "1"), 150);
 
       window.clientRequestsChart = new Chart(ctx, {
         type: "line",
@@ -449,4 +446,80 @@ window.addEventListener("load", () => {
   if (activeTab && activeTab.dataset.tab === "active") {
     filterBar.style.display = "flex";
   }
+  
+  // Auto-hide success/error messages
+  setTimeout(() => {
+    document.querySelectorAll('.success-message, .error-message').forEach(msg => {
+      msg.style.transition = 'opacity 0.5s ease';
+      msg.style.opacity = '0';
+      setTimeout(() => msg.remove(), 500);
+    });
+  }, 4000);
 });
+
+// ============================================
+// PROVIDER SPOTLIGHT FUNCTIONS
+// ============================================
+
+// Book Again Function
+function bookAgain(skillId, providerName) {
+  if (confirm(`Book ${providerName} again?`)) {
+    document.getElementById('browseLink').click();
+    
+    setTimeout(() => {
+      const cards = document.querySelectorAll('.provider-card');
+      cards.forEach(card => {
+        const bookForm = card.querySelector('form[method="POST"]');
+        if (bookForm) {
+          const skillInput = bookForm.querySelector('input[name="book_skill_id"]');
+          if (skillInput && parseInt(skillInput.value) === skillId) {
+            card.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            card.style.border = '3px solid #28a745';
+            card.style.boxShadow = '0 0 30px rgba(40, 167, 69, 0.4)';
+            setTimeout(() => {
+              card.style.border = '';
+              card.style.boxShadow = '';
+            }, 3000);
+          }
+        }
+      });
+    }, 500);
+  }
+}
+
+// View Provider Profile Modal  
+function viewProviderProfile(providerId, name, skill, rate, bookingCount) {
+  const info = document.getElementById('contactInfo');
+  
+  info.innerHTML = `
+    <div style="text-align: center; margin-bottom: 1.5rem;">
+      <div style="width: 80px; height: 80px; margin: 0 auto 1rem; background: linear-gradient(135deg, #667eea, #764ba2); color: white; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 2rem; font-weight: 800;">
+        ${name.split(' ').map(n => n[0]).join('').toUpperCase()}
+      </div>
+      <h3 style="margin: 0 0 0.5rem 0; color: #2c3e50;">${name}</h3>
+      <p style="color: #667eea; font-weight: 600; margin: 0;">${skill}</p>
+    </div>
+    
+    <div style="background: #f8f9fa; padding: 1.5rem; border-radius: 12px; margin-bottom: 1rem;">
+      <div style="display: flex; justify-content: space-between; margin-bottom: 1rem;">
+        <div style="text-align: center; flex: 1;">
+          <div style="font-size: 1.5rem; font-weight: 800; color: #667eea;">${bookingCount}</div>
+          <div style="font-size: 0.85rem; color: #6c757d;">Bookings</div>
+        </div>
+        <div style="width: 1px; background: #dee2e6;"></div>
+        <div style="text-align: center; flex: 1;">
+          <div style="font-size: 1.5rem; font-weight: 800; color: #28a745;">₱${rate}</div>
+          <div style="font-size: 0.85rem; color: #6c757d;">Per Hour</div>
+        </div>
+      </div>
+    </div>
+    
+    <div style="background: #fff3cd; padding: 1rem; border-radius: 8px; border-left: 4px solid #ffc107;">
+      <p style="margin: 0; color: #856404; font-weight: 600;">
+        💡 Direct messaging and detailed profiles coming soon!
+      </p>
+    </div>
+  `;
+  
+  openModal('contactModal');
+}
