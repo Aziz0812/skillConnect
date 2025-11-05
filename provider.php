@@ -68,6 +68,32 @@ if (isset($_COOKIE['remember_token'])) {
                 echo json_encode(['ok' => true, 'data' => $data]);
                 exit;
             }
+            /* ---------------------------
+            (4) GET AVAILABILITY (for client)
+            --------------------------- */
+            if ($action === 'get_availability' && isset($_GET['provider'])) {
+                $provider_id = intval($_GET['provider']);
+                if ($provider_id <= 0) {
+                    echo json_encode(['ok' => false, 'error' => 'Invalid provider']);
+                    exit;
+                }
+
+                $stmt = $conn->prepare("
+                    SELECT DayOfWeek, StartTime, EndTime
+                    FROM provider_availability
+                    WHERE ProviderID = ?
+                    ORDER BY FIELD(DayOfWeek,'Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday')
+                ");
+                $stmt->bind_param("i", $provider_id);
+                $stmt->execute();
+                $res = $stmt->get_result();
+                $data = [];
+                while ($row = $res->fetch_assoc()) {
+                    $data[] = $row;
+                }
+                echo json_encode(['ok' => true, 'data' => $data]);
+                exit;
+            }
 
             /* ---------------------------
             (2) ADD AVAILABILITY
@@ -214,6 +240,26 @@ if (isset($_COOKIE['remember_token'])) {
                 exit;
             }
 
+
+                       // --- GET AVAILABILITY (CLIENT SIDE) ---
+            if ($action === 'get_availability' && isset($_GET['provider'])) {
+                $provider_id = intval($_GET['provider']);
+                $stmt = $conn->prepare("
+                    SELECT DayOfWeek, StartTime, EndTime
+                    FROM provider_availability
+                    WHERE ProviderID = ?
+                    ORDER BY FIELD(DayOfWeek,'Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'), StartTime
+                ");
+                $stmt->bind_param("i", $provider_id);
+                $stmt->execute();
+                $res = $stmt->get_result();
+                $data = [];
+                while ($row = $res->fetch_assoc()) {
+                    $data[] = $row;
+                }
+                echo json_encode(['ok' => true, 'data' => $data]);
+                exit;
+            }
 
             // --- FALLBACK ---
             echo json_encode(['ok' => false, 'error' => 'Unknown action']);

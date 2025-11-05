@@ -3,6 +3,12 @@ session_start();
 require 'db.php';
 
 if (!isset($_SESSION['pending_google_user'])) {
+    // Give role_select what it wants
+    $_SESSION['google_user'] = [
+        'email' => $email,
+        'name'  => $_SESSION['pending_google_user']['name'],
+        'uid'   => $_SESSION['pending_google_user']['uid']
+    ];
     header("Location: login.php");
     exit;
 }

@@ -1,94 +1,210 @@
-    // ============================
-    // BROWSE SERVICES JS MODULE
-    // ============================
-document.addEventListener("DOMContentLoaded", () => {
+// ============================================
+// BROWSE & SEARCH FUNCTIONALITY
+// ============================================
 
-        const browseSection = document.getElementById("browseSection");
-        if (!browseSection) return; // Exit if not on client.php
+document.addEventListener('DOMContentLoaded', () => {
+    // Update price label based on rate type
+        const rateTypeFilter = document.getElementById('rateTypeFilter');
+        const rateRangeFilter = document.getElementById('rateRangeFilter');
 
-        console.log("✅ browse.js loaded for Browse Services");
+        function updatePriceLabel() {
+            const type = rateTypeFilter?.value;
+            const options = rateRangeFilter?.options;
+            if (!options) return;
 
-        // Wait until Browse section becomes active before initializing
-        const observer = new MutationObserver(() => {
-            if (browseSection.classList.contains("active")) {
-            initBrowseFeatures();
+            for (let opt of options) {
+                if (opt.value === 'all') {
+                    opt.text = 'Any Price';
+                    continue;
+                }
+                let text = opt.text.split(' ')[0]; // ₱0
+                if (type === 'hourly') text += '/hr';
+                else if (type === 'daily') text += '/day';
+                else if (type === 'fixed') text = opt.text.replace(/\/hr.*/, ' (fixed)');
+                else text = opt.text.replace(/\/hr.*$/, '');
+                opt.text = text;
             }
-        });
-
-        observer.observe(browseSection, { attributes: true, attributeFilter: ["class"] });
-
-        // ----------------------------
-        // Main feature initialization
-        // ----------------------------
-        function initBrowseFeatures() {
-            console.log("🎯 Initializing Browse section features...");
-
-            const searchBox = document.getElementById("searchBox");
-            const categoryFilter = document.getElementById("categoryFilter");
-            const providerCards = document.querySelectorAll("#browseSection .provider-card");
-
-            if (!searchBox || !categoryFilter || providerCards.length === 0) {
-            console.warn("⚠️ Missing browse elements or no providers found.");
-            return;
-            }
-
-            function filterServices() {
-            const searchTerm = searchBox.value.toLowerCase().trim();
-            const selectedCategory = categoryFilter.value.toLowerCase();
-
-            let visibleCount = 0;
-
-            providerCards.forEach(card => {
-                const name = card.querySelector(".provider-header h3")?.textContent.toLowerCase() || "";
-                const category = card.querySelector(".category-badge")?.textContent.toLowerCase() || "";
-                const description = card.querySelector(".card-description")?.textContent.toLowerCase() || "";
-                const locationText = card.querySelector(".provider-details p")?.textContent.toLowerCase() || "";
-
-                // 🔹 Optional: if your card has data attributes like data-city or data-province, include them
-                const city = card.dataset.city?.toLowerCase() || "";
-                const province = card.dataset.province?.toLowerCase() || "";
-                const barangay = card.dataset.barangay?.toLowerCase() || "";
-
-                // 🔹 Combine all searchable fields
-                const searchableText = [name, category, description, locationText, city, province, barangay].join(" ");
-
-                const matchesSearch = searchTerm === "" || searchableText.includes(searchTerm);
-                const matchesCategory = selectedCategory === "all" || category.includes(selectedCategory);
-
-                const isVisible = matchesSearch && matchesCategory;
-                card.style.display = isVisible ? "block" : "none";
-
-                if (isVisible) visibleCount++;
-            });
-
-            // Handle "No results"
-            const noResults = document.getElementById("noResultsMessage");
-            if (noResults) noResults.style.display = visibleCount === 0 ? "block" : "none";
-            }
-
-
-            // Attach event listeners
-            searchBox.addEventListener("input", filterServices);
-            categoryFilter.addEventListener("change", filterServices);
-
-            // Add a "No results" message if it doesn’t exist
-            if (!document.getElementById("noResultsMessage")) {
-            const message = document.createElement("p");
-            message.id = "noResultsMessage";
-            message.textContent = "No matching services found.";
-            message.style.display = "none";
-            message.style.textAlign = "center";
-            message.style.color = "#888";
-            browseSection.appendChild(message);
-            }
-
-            console.log("✅ Browse filtering activated.");
         }
 
+        rateTypeFilter?.addEventListener('change', () => {
+            updatePriceLabel();
+            performSearch();
+        });
+        updatePriceLabel(); // on load
 
 
+    const searchBox = document.getElementById('searchBox');
+    const categoryFilter = document.getElementById('categoryFilter');
+    const servicesContainer = document.getElementById('servicesContainer');
 
+    // Debounce function to limit API calls
+    function debounce(func, delay) {
+        let timeout;
+        return function(...args) {
+            clearTimeout(timeout);
+            timeout = setTimeout(() => func.apply(this, args), delay);
+        };
+    }//the browse.js
 
+    // Perform search
+    async function performSearch() {
+        const query = searchBox.value.trim();
+        const category = categoryFilter.value;
+        const city = document.getElementById('cityFilter')?.value || 'all';
+        const rateType = document.getElementById('rateTypeFilter')?.value || 'all';
+        const rateRange = document.getElementById('rateRangeFilter')?.value || 'all';
 
-        
+        try {
+            // Show loading
+            if (servicesContainer) {
+                servicesContainer.innerHTML = '<div style="text-align:center; padding:40px;">🔍 Searching...</div>';
+            }
+            
+            const url = `client.php?ajax=1&action=search_skills&q=${encodeURIComponent(query)}&category=${encodeURIComponent(category)}&city=${encodeURIComponent(city)}&rate_type=${encodeURIComponent(rateType)}&rate_range=${encodeURIComponent(rateRange)}`;
+            const response = await fetch(url);
+            const data = await response.json();
+
+            if (data.ok) {
+                renderResults(data.data);
+            } else {
+                console.error('Search failed:', data.error);
+            }
+        } catch (error) {
+            console.error('Search error:', error);
+        }
+    }
+
+    // Render search results
+    function renderResults(skills) {
+        if (!servicesContainer) return;
+
+        if (skills.length === 0) {
+            servicesContainer.innerHTML = '<div class="empty-state">No services found matching your criteria.</div>';
+            return;
+        }
+
+        servicesContainer.innerHTML = skills.map(p => {
+            // Format location
+            const locationParts = [p.Barangay, p.City, p.Province].filter(Boolean);
+            const location = locationParts.length > 0 
+                ? locationParts.join(', ') 
+                : (p.Location || 'Unknown');
+
+            // Truncate description
+            const description = p.Description || '';
+            const shortDesc = description.length > 100 
+                ? description.substring(0, 100) + '...' 
+                : description;
+
+            return `
+                    <div class="provider-card"
+                        data-city="${escapeHtml(p.City || '')}"
+                        data-province="${escapeHtml(p.Province || '')}"
+                        data-barangay="${escapeHtml(p.Barangay || '')}">
+
+                        <div class="provider-header">
+                            <h3>${escapeHtml((p.FName || '') + ' ' + (p.LName || ''))}</h3>
+                            <span class="category-badge">${escapeHtml(p.SkillName || 'Other')}</span>
+                        </div>
+                        
+                        <div class="provider-details">
+                            <p><strong>Location:</strong> ${escapeHtml(location)}</p>
+                            <p class="rate-highlight"><strong>Rate:</strong> PHP ${parseFloat(p.Rate || 0).toFixed(2)}
+                                ${p.RateType === 'daily' ? '/day' : (p.RateType === 'fixed' ? ' (fixed)' : '/hour')}
+                            </p>
+                        </div>
+
+                        <p class="card-description">${escapeHtml(shortDesc)}</p>
+
+                        <div class="card-actions">
+                            <button class="btn-secondary read-more-btn" 
+                                    data-description="${escapeHtml(description)}">
+                                Read More
+                            </button>
+                            <form method="POST" class="book-form" style="display:inline;">
+                                <input type="hidden" name="book_skill_id" value="${parseInt(p.SkillID) || 0}">
+                                <input type="datetime-local" name="preferred_schedule" required>
+                                <button type="submit" class="btn-primary book-btn">Book Now</button>
+                            </form>
+                        </div>
+                    </div>
+                `;
+        }).join('');
+
+        // Re-attach event listeners
+        reattachEventListeners();
+    }
+
+    // Escape HTML to prevent XSS
+    function escapeHtml(text) {
+        const div = document.createElement('div');
+        div.textContent = text;
+        return div.innerHTML;
+    }
+
+    // Re-attach event listeners after rendering
+    function reattachEventListeners() {
+        // Read More buttons
+        document.querySelectorAll('.read-more-btn').forEach(btn => {
+            btn.addEventListener('click', function() {
+                const description = this.getAttribute('data-description');
+                const fullDescription = document.getElementById('fullDescription');
+                if (fullDescription) {
+                    fullDescription.innerHTML = description.replace(/\n/g, '<br>');
+                    document.getElementById('descModal').classList.add('show');
+                    document.body.style.overflow = 'hidden';
+                }
+            });
+        });
+
+        // Book forms
+        document.querySelectorAll('.book-form').forEach(form => {
+            form.addEventListener('submit', function(e) {
+                const card = this.closest('.provider-card');
+                if (card) {
+                    card.style.transition = 'opacity 0.4s ease, transform 0.4s ease';
+                    card.style.opacity = '0';
+                    card.style.transform = 'translateY(20px)';
+                }
+            });
+        });
+    }
+
+    // Attach search listeners
+    if (searchBox) {
+        searchBox.addEventListener('input', debounce(performSearch, 500));
+    }
+
+    if (categoryFilter) {
+        categoryFilter.addEventListener('change', performSearch);
+    }
+
+    // City filter
+    const cityFilter = document.getElementById('cityFilter');
+    if (cityFilter) {
+        cityFilter.addEventListener('change', performSearch);
+    }
+
+       // Rate Type & Range filters
+    if (rateTypeFilter) {
+        rateTypeFilter.addEventListener('change', performSearch);
+    }
+    if (rateRangeFilter) {
+        rateRangeFilter.addEventListener('change', performSearch);
+    }
+
+    // Clear filters button
+    const clearFiltersBtn = document.getElementById('clearFilters');
+    if (clearFiltersBtn) {
+        clearFiltersBtn.addEventListener('click', () => {
+            if (searchBox) searchBox.value = '';
+            if (categoryFilter) categoryFilter.value = 'all';
+            if (cityFilter) cityFilter.value = 'all';
+            const rateTypeFilter = document.getElementById('rateTypeFilter');
+            const rateRangeFilter = document.getElementById('rateRangeFilter');
+            if (rateTypeFilter) rateTypeFilter.value = 'all';
+            if (rateRangeFilter) rateRangeFilter.value = 'all';
+            performSearch();
+        });
+    }
 });

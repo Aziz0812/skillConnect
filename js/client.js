@@ -3,45 +3,59 @@
 // ==========================
 document.addEventListener("DOMContentLoaded", () => {
   // === SECTION NAVIGATION ===
-  function showSection(sectionId) {
-    document.querySelectorAll("main section").forEach(sec => sec.classList.remove("active"));
-    document.getElementById(sectionId).classList.add("active");
+ function showSection(sectionId) {
+    const section = document.getElementById(sectionId);
+    if (!section) {
+        console.warn(`Section ${sectionId} not found`);
+        return;
+    }
+
+    // Hide all sections
+    document.querySelectorAll("main section").forEach(sec => {
+        sec.classList.remove("active");
+    });
+
+    // Show target
+    section.classList.add("active");
 
     // Highlight nav
     document.querySelectorAll(".nav-links a").forEach(a => a.classList.remove("active"));
-    if (sectionId === "dashboardSection") document.getElementById("dashboardLink").classList.add("active");
-    if (sectionId === "browseSection") document.getElementById("browseLink").classList.add("active");
-    if (sectionId === "requestSection") document.getElementById("requestsLink").classList.add("active");
+    const linkMap = {
+        "dashboardSection": "dashboardLink",
+        "browseSection": "browseLink",
+        "requestSection": "requestsLink"
+    };
+    const linkId = linkMap[sectionId];
+    if (linkId) {
+        const link = document.getElementById(linkId);
+        if (link) link.classList.add("active");
+    }
 
-   
     // Save active section
     sessionStorage.setItem("activeSection", sectionId);
 
-    // Default to Active tab when showing requests
+    // Default to Active tab in Requests
     if (sectionId === "requestSection") {
-      document.querySelectorAll(".tab-btn").forEach(b => b.classList.remove("active"));
-      document.querySelectorAll(".request-section").forEach(sec => sec.classList.remove("active"));
-      const activeTab = document.querySelector('.tab-btn[data-tab="active"]');
-      const activeSection = document.getElementById("requestSection-active");
-      if (activeTab && activeSection) {
-        activeTab.classList.add("active");
-        activeSection.classList.add("active");
-      }
+        document.querySelectorAll(".tab-btn").forEach(b => b.classList.remove("active"));
+        document.querySelectorAll(".request-section").forEach(sec => sec.classList.remove("active"));
+        const activeTab = document.querySelector('.tab-btn[data-tab="active"]');
+        const activeSection = document.getElementById("requestSection-active");
+        if (activeTab) activeTab.classList.add("active");
+        if (activeSection) activeSection.classList.add("active");
     }
 
-    // Adjust scroll smoothly
+    // Smooth scroll
     setTimeout(() => {
-      const section = document.getElementById(sectionId);
-      const h2Element = section.querySelector("h2");
-      const navbarHeight = document.querySelector(".top-nav").offsetHeight || 80;
-      const h2Top = h2Element.offsetTop;
-
-      window.scrollTo({
-        top: h2Top - navbarHeight - 20,
-        behavior: "smooth"
-      });
+        const h2Element = section.querySelector("h2");
+        if (!h2Element) return;
+        const navbarHeight = document.querySelector(".top-nav")?.offsetHeight || 80;
+        const h2Top = h2Element.getBoundingClientRect().top + window.pageYOffset;
+        window.scrollTo({
+            top: h2Top - navbarHeight - 20,
+            behavior: "smooth"
+        });
     }, 100);
-  }
+}
 
   // === NAV LINKS ===
   const dashboardLink = document.getElementById("dashboardLink");
@@ -78,8 +92,21 @@ document.addEventListener("DOMContentLoaded", () => {
   // === INITIAL SECTION LOAD ===
   const urlParams = new URLSearchParams(window.location.search);
   const sectionFromUrl = urlParams.get("section");
-  const savedSection = sectionFromUrl || sessionStorage.getItem("activeSection") || "dashboardSection";
-  showSection(savedSection);
+  // Wait for DOM to be ready
+document.addEventListener("DOMContentLoaded", () => {
+    const urlParams = new URLSearchParams(window.location.search);
+    const sectionFromUrl = urlParams.get("section");
+    const savedSection = sectionFromUrl || sessionStorage.getItem("activeSection") || "dashboardSection";
+    showSection(savedSection);
+
+    // Re-run on hash change
+    window.addEventListener("hashchange", () => {
+        const hash = window.location.hash.replace("#", "");
+        if (hash === "browse" || hash === "requests") {
+            showSection(hash === "browse" ? "browseSection" : "requestSection");
+        }
+    });
+});
 
   // === MODALS ===
   function openModal(id) {
@@ -250,6 +277,68 @@ document.addEventListener("DOMContentLoaded", () => {
     });
   }
 
+    // === REUSABLE: Initialize Custom Status Dropdown ===
+  function initCustomStatusDropdown() {
+    const realSelect = document.getElementById('statusFilter');
+    if (!realSelect) return;
+
+    const trigger = document.querySelector('.custom-select__trigger span');
+    const customSelect = document.querySelector('.custom-select');
+    const customOptions = document.querySelectorAll('.custom-option');
+
+    if (!trigger || !customSelect) return;
+
+    // Clone trigger to remove old listeners
+    const triggerParent = trigger.closest('.custom-select__trigger');
+    const cloned = triggerParent.cloneNode(true);
+    triggerParent.replaceWith(cloned);
+
+    const finalTrigger = cloned.querySelector('span');
+    const finalCustomSelect = document.querySelector('.custom-select');
+
+    function syncDisplay() {
+      const value = realSelect.value;
+      const text = realSelect.options[realSelect.selectedIndex].text;
+      finalTrigger.textContent = text;
+      customOptions.forEach(opt => {
+        opt.classList.toggle('selected', opt.dataset.value === value);
+      });
+    }
+
+    cloned.addEventListener('click', function (e) {
+      e.stopPropagation();
+      const isOpen = finalCustomSelect.classList.toggle('open');
+      document.querySelectorAll('.custom-select').forEach(el => {
+        if (el !== finalCustomSelect) el.classList.remove('open');
+      });
+    });
+
+    customOptions.forEach(option => {
+      option.addEventListener('click', function () {
+        const value = this.dataset.value;
+        realSelect.value = value;
+        syncDisplay();
+        finalCustomSelect.classList.remove('open');
+        realSelect.dispatchEvent(new Event('change', { bubbles: true }));
+      });
+    });
+
+    document.addEventListener('click', function (e) {
+      if (!finalCustomSelect.contains(e.target)) {
+        finalCustomSelect.classList.remove('open');
+      }
+    });
+
+    document.addEventListener('keydown', function (e) {
+      if (e.key === 'Escape') {
+        finalCustomSelect.classList.remove('open');
+      }
+    });
+
+    syncDisplay();
+    realSelect.addEventListener('change', syncDisplay);
+  }
+
   // === TAB SWITCHING INSIDE REQUESTS ===
   document.querySelectorAll(".tab-btn").forEach(btn => {
     btn.addEventListener("click", function() {
@@ -262,12 +351,14 @@ document.addEventListener("DOMContentLoaded", () => {
       // Show or hide filter bar based on tab
       const filterBar = document.getElementById("activeFilters");
       if (this.dataset.tab === "active") {
-        filterBar.style.display = "flex";
+        filterBar.classList.add("active");
+        setTimeout(initCustomStatusDropdown, 50);
       } else {
-        filterBar.style.display = "none";
+        filterBar.classList.remove("active");
       }
     });
   });
+
 
 
   // === CARD HOVER EFFECT ===
@@ -429,9 +520,9 @@ animateCount("completedCount", data.Completed || 0);
 }
 
 
-// Auto-load on page open
 window.addEventListener("load", () => {
   setTimeout(() => loadClientDashboard(), 300);
+
   const filterSelect = document.getElementById("dashboardFilter");
   if (filterSelect) {
     filterSelect.addEventListener("change", () => {
@@ -439,15 +530,15 @@ window.addEventListener("load", () => {
       loadClientDashboard(selectedFilter);
     });
   }
-});
-window.addEventListener("load", () => {
+
+  // === SHOW FILTER BAR ON ACTIVE TAB (INITIAL LOAD) ===
   const activeTab = document.querySelector(".tab-btn.active");
   const filterBar = document.getElementById("activeFilters");
   if (activeTab && activeTab.dataset.tab === "active") {
-    filterBar.style.display = "flex";
+    filterBar.classList.add("active");
   }
-  
-  // Auto-hide success/error messages
+
+  // === AUTO-HIDE MESSAGES ===
   setTimeout(() => {
     document.querySelectorAll('.success-message, .error-message').forEach(msg => {
       msg.style.transition = 'opacity 0.5s ease';
@@ -456,6 +547,7 @@ window.addEventListener("load", () => {
     });
   }, 4000);
 });
+
 
 // ============================================
 // PROVIDER SPOTLIGHT FUNCTIONS
