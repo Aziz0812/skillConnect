@@ -1,9 +1,93 @@
+// ============================================
+// FLATPICKR CALENDAR INITIALIZATION
+// ============================================
+function initializeDatePickers() {
+  const dateInputs = document.querySelectorAll('.flatpickr-input');
+  
+  dateInputs.forEach(input => {
+    if (input._flatpickr) return; // Already initialized
+    
+    const form = input.closest('form');
+    const hiddenInput = form?.querySelector('input[name="preferred_schedule"]');
+    const skillIdInput = form?.querySelector('input[name="book_skill_id"]');
+    const providerId = skillIdInput?.value;
+    
+    flatpickr(input, {
+      enableTime: true,
+      dateFormat: "F j, Y at h:i K",
+      altInput: true,
+      altFormat: "F j, Y at h:i K",
+      minDate: "today",
+      time_24hr: false,
+      minuteIncrement: 15,
+      onChange: function(selectedDates, dateStr, instance) {
+        // Convert to Y-m-d\TH:i format for backend
+        if (selectedDates[0] && hiddenInput) {
+          const date = selectedDates[0];
+          const year = date.getFullYear();
+          const month = String(date.getMonth() + 1).padStart(2, '0');
+          const day = String(date.getDate()).padStart(2, '0');
+          const hours = String(date.getHours()).padStart(2, '0');
+          const minutes = String(date.getMinutes()).padStart(2, '0');
+          hiddenInput.value = `${year}-${month}-${day}T${hours}:${minutes}`;
+        }
+      },
+      onReady: async function(selectedDates, dateStr, instance) {
+        // Fetch provider availability
+        if (!providerId) return;
+        
+        try {
+          const res = await fetch(`provider.php?ajax=1&action=get_availability&provider=${providerId}`);
+          const data = await res.json();
+          
+          if (data.ok && data.data.length > 0) {
+            const availability = data.data;
+            
+            // Disable dates where provider is NOT available
+            instance.set('disable', [
+              function(date) {
+                const dayName = date.toLocaleDateString('en-US', { weekday: 'long' });
+                const hours = date.getHours();
+                const minutes = date.getMinutes();
+                const timeInMinutes = hours * 60 + minutes;
+                
+                // Check if this day+time is available
+                const isAvailable = availability.some(slot => {
+                  if (slot.DayOfWeek !== dayName) return false;
+                  
+                  // Convert slot times to minutes
+                  const [startH, startM] = slot.StartTime.split(':').map(Number);
+                  const [endH, endM] = slot.EndTime.split(':').map(Number);
+                  const startMinutes = startH * 60 + startM;
+                  const endMinutes = endH * 60 + endM;
+                  
+                  return timeInMinutes >= startMinutes && timeInMinutes <= endMinutes;
+                });
+                
+                return !isAvailable; // Disable if NOT available
+              }
+            ]);
+            
+            console.log('Provider availability loaded:', availability);
+          }
+        } catch (err) {
+          console.error('Failed to load availability:', err);
+        }
+      }
+    });
+  });
+}
+
 // ==========================
 // CLIENT DASHBOARD JAVASCRIPT
 // ==========================
 document.addEventListener("DOMContentLoaded", () => {
+  
+  // Initialize date pickers on load
+  setTimeout(() => initializeDatePickers(), 500);
+
   // === SECTION NAVIGATION ===
- function showSection(sectionId) {
+  function showSection(sectionId) {
     const section = document.getElementById(sectionId);
     if (!section) {
         console.warn(`Section ${sectionId} not found`);
@@ -44,6 +128,11 @@ document.addEventListener("DOMContentLoaded", () => {
         if (activeSection) activeSection.classList.add("active");
     }
 
+    // Re-init date pickers when switching sections
+    if (sectionId === "browseSection") {
+      setTimeout(() => initializeDatePickers(), 300);
+    }
+
     // Smooth scroll
     setTimeout(() => {
         const h2Element = section.querySelector("h2");
@@ -67,7 +156,6 @@ document.addEventListener("DOMContentLoaded", () => {
     e.preventDefault();
     showSection("dashboardSection");
     
-    // Give the section a short delay before drawing the chart
     setTimeout(() => {
       loadClientDashboard();
     }, 300);
@@ -92,21 +180,8 @@ document.addEventListener("DOMContentLoaded", () => {
   // === INITIAL SECTION LOAD ===
   const urlParams = new URLSearchParams(window.location.search);
   const sectionFromUrl = urlParams.get("section");
-  // Wait for DOM to be ready
-document.addEventListener("DOMContentLoaded", () => {
-    const urlParams = new URLSearchParams(window.location.search);
-    const sectionFromUrl = urlParams.get("section");
-    const savedSection = sectionFromUrl || sessionStorage.getItem("activeSection") || "dashboardSection";
-    showSection(savedSection);
-
-    // Re-run on hash change
-    window.addEventListener("hashchange", () => {
-        const hash = window.location.hash.replace("#", "");
-        if (hash === "browse" || hash === "requests") {
-            showSection(hash === "browse" ? "browseSection" : "requestSection");
-        }
-    });
-});
+  const savedSection = sectionFromUrl || sessionStorage.getItem("activeSection") || "dashboardSection";
+  showSection(savedSection);
 
   // === MODALS ===
   function openModal(id) {
@@ -201,40 +276,6 @@ document.addEventListener("DOMContentLoaded", () => {
     });
   });
 
-  document.querySelectorAll(".ajax-book-form").forEach(form => {
-    form.addEventListener("submit", function(e) {
-      e.preventDefault();
-      const btn = form.querySelector(".book-btn");
-      btn.disabled = true;
-      btn.textContent = "Booking...";
-
-      const skillId = form.querySelector('input[name="book_skill_id"]').value;
-
-      fetch("book_skill.php", {
-        method: "POST",
-        headers: { "Content-Type": "application/x-www-form-urlencoded" },
-        body: "skill_id=" + encodeURIComponent(skillId)
-      })
-        .then(res => res.json())
-        .then(data => {
-          if (data.success) {
-            btn.textContent = "Booked!";
-            btn.classList.add("booked");
-            setTimeout(() => window.location.reload(), 1000);
-          } else {
-            btn.textContent = "Book Now";
-            btn.disabled = false;
-            alert(data.message || "Booking failed.");
-          }
-        })
-        .catch(() => {
-          btn.textContent = "Book Now";
-          btn.disabled = false;
-          alert("Network error.");
-        });
-    });
-  });
-
   // === CANCEL REQUEST ===
   document.querySelectorAll(".cancel-request-btn").forEach(btn => {
     btn.addEventListener("click", function() {
@@ -250,7 +291,7 @@ document.addEventListener("DOMContentLoaded", () => {
       })
         .then(res => res.json())
         .then(data => {
-          if (data.success) {
+          if (data.ok) {
             btn.textContent = "Cancelled";
             btn.classList.add("cancelled");
             setTimeout(() => window.location.reload(), 1000);
@@ -267,6 +308,37 @@ document.addEventListener("DOMContentLoaded", () => {
         });
     });
   });
+    // === BOOK AGAIN FUNCTIONALITY ===
+  document.querySelectorAll(".book-again-btn").forEach(btn => {
+    btn.addEventListener("click", function() {
+      const skillId = this.getAttribute("data-skill-id");
+      const providerName = this.getAttribute("data-provider");
+      
+      if (confirm(`Book ${providerName} again?`)) {
+        document.getElementById('browseLink').click();
+        
+        setTimeout(() => {
+          const cards = document.querySelectorAll('.provider-card');
+          cards.forEach(card => {
+            const bookForm = card.querySelector('form[method="POST"]');
+            if (bookForm) {
+              const skillInput = bookForm.querySelector('input[name="book_skill_id"]');
+              if (skillInput && skillInput.value === skillId) {
+                card.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                card.style.border = '3px solid #28a745';
+                card.style.boxShadow = '0 0 30px rgba(40, 167, 69, 0.4)';
+                
+                setTimeout(() => {
+                  card.style.border = '';
+                  card.style.boxShadow = '';
+                }, 3000);
+              }
+            }
+          });
+        }, 500);
+      }
+    });
+  });
 
   // === PROGRESS BAR ANIMATION ===
   function animateProgressBars() {
@@ -275,68 +347,6 @@ document.addEventListener("DOMContentLoaded", () => {
       bar.style.width = "0%";
       setTimeout(() => { bar.style.width = width; }, 300);
     });
-  }
-
-    // === REUSABLE: Initialize Custom Status Dropdown ===
-  function initCustomStatusDropdown() {
-    const realSelect = document.getElementById('statusFilter');
-    if (!realSelect) return;
-
-    const trigger = document.querySelector('.custom-select__trigger span');
-    const customSelect = document.querySelector('.custom-select');
-    const customOptions = document.querySelectorAll('.custom-option');
-
-    if (!trigger || !customSelect) return;
-
-    // Clone trigger to remove old listeners
-    const triggerParent = trigger.closest('.custom-select__trigger');
-    const cloned = triggerParent.cloneNode(true);
-    triggerParent.replaceWith(cloned);
-
-    const finalTrigger = cloned.querySelector('span');
-    const finalCustomSelect = document.querySelector('.custom-select');
-
-    function syncDisplay() {
-      const value = realSelect.value;
-      const text = realSelect.options[realSelect.selectedIndex].text;
-      finalTrigger.textContent = text;
-      customOptions.forEach(opt => {
-        opt.classList.toggle('selected', opt.dataset.value === value);
-      });
-    }
-
-    cloned.addEventListener('click', function (e) {
-      e.stopPropagation();
-      const isOpen = finalCustomSelect.classList.toggle('open');
-      document.querySelectorAll('.custom-select').forEach(el => {
-        if (el !== finalCustomSelect) el.classList.remove('open');
-      });
-    });
-
-    customOptions.forEach(option => {
-      option.addEventListener('click', function () {
-        const value = this.dataset.value;
-        realSelect.value = value;
-        syncDisplay();
-        finalCustomSelect.classList.remove('open');
-        realSelect.dispatchEvent(new Event('change', { bubbles: true }));
-      });
-    });
-
-    document.addEventListener('click', function (e) {
-      if (!finalCustomSelect.contains(e.target)) {
-        finalCustomSelect.classList.remove('open');
-      }
-    });
-
-    document.addEventListener('keydown', function (e) {
-      if (e.key === 'Escape') {
-        finalCustomSelect.classList.remove('open');
-      }
-    });
-
-    syncDisplay();
-    realSelect.addEventListener('change', syncDisplay);
   }
 
   // === TAB SWITCHING INSIDE REQUESTS ===
@@ -348,18 +358,14 @@ document.addEventListener("DOMContentLoaded", () => {
       const target = document.getElementById("requestSection-" + this.dataset.tab);
       if (target) target.classList.add("active");
 
-      // Show or hide filter bar based on tab
       const filterBar = document.getElementById("activeFilters");
       if (this.dataset.tab === "active") {
         filterBar.classList.add("active");
-        setTimeout(initCustomStatusDropdown, 50);
       } else {
         filterBar.classList.remove("active");
       }
     });
   });
-
-
 
   // === CARD HOVER EFFECT ===
   document.querySelectorAll(".provider-card, .request-card").forEach(card => {
@@ -367,7 +373,9 @@ document.addEventListener("DOMContentLoaded", () => {
     card.addEventListener("mouseleave", () => { card.style.transform = "translateY(0)"; });
   });
 
-  // === DASHBOARD FILTER (inside DOMContentLoaded) ===
+  
+
+  // === DASHBOARD FILTER ===
   const filterSelect = document.getElementById("dashboardFilter");
   if (filterSelect) {
     filterSelect.addEventListener("change", async () => {
@@ -429,46 +437,28 @@ async function loadClientDashboard(filter = "all") {
   try {
     const base = "client.php?ajax=1";
 
-    // --- Booking Summary ---
     const summaryRes = await fetch(`${base}&action=booking_summary`);
     const summary = await summaryRes.json();
 
     if (summary.ok) {
       const data = summary.data || {};
       function animateCount(id, endValue) {
-      const el = document.getElementById(id);
-      let start = 0;
-      const duration = 1000;
-      const stepTime = Math.max(Math.floor(duration / endValue), 20);
-      const timer = setInterval(() => {
-        start++;
-        el.textContent = start;
-        if (start >= endValue) clearInterval(timer);
-      }, stepTime);
+        const el = document.getElementById(id);
+        let start = 0;
+        const duration = 1000;
+        const stepTime = Math.max(Math.floor(duration / endValue), 20);
+        const timer = setInterval(() => {
+          start++;
+          el.textContent = start;
+          if (start >= endValue) clearInterval(timer);
+        }, stepTime);
+      }
+
+      animateCount("pendingCount", data.Pending || 0);
+      animateCount("inProgressCount", data["In Progress"] || 0);
+      animateCount("completedCount", data.Completed || 0);
     }
 
-animateCount("pendingCount", data.Pending || 0);
-animateCount("inProgressCount", data["In Progress"] || data["In progress"] || 0);
-animateCount("completedCount", data.Completed || 0);
-       
-      // === TOOLTIP TEXT UPDATE ===
-        const pending = data.Pending || 0;
-        const inProg = data["In Progress"] || data["In progress"] || 0;
-        const completed = data.Completed || 0;
-
-        document.querySelector("#pendingCount").closest(".stat-card")
-          ?.setAttribute("data-tooltip", `You currently have ${pending} pending request${pending === 1 ? '' : 's'}.`);
-
-        document.querySelector("#inProgressCount").closest(".stat-card")
-          ?.setAttribute("data-tooltip", `You currently have ${inProg} in-progress request${inProg === 1 ? '' : 's'}.`);
-
-        document.querySelector("#completedCount").closest(".stat-card")
-          ?.setAttribute("data-tooltip", `You’ve completed ${completed} request${completed === 1 ? '' : 's'} so far.`);
-
-
-    }
-
-    // --- Requests Over Time ---
     const chartRes = await fetch(`${base}&action=requests_over_time&filter=${filter}`);
     const chartData = await chartRes.json();
 
@@ -477,9 +467,7 @@ animateCount("completedCount", data.Completed || 0);
       const labels = chartData.data.map(r => r.Month);
       const counts = chartData.data.map(r => r.Count);
 
-      // Destroy old chart if exists
       if (window.clientRequestsChart) window.clientRequestsChart.destroy();
-
 
       window.clientRequestsChart = new Chart(ctx, {
         type: "line",
@@ -504,21 +492,11 @@ animateCount("completedCount", data.Completed || 0);
           },
         },
       });
-    } else {
-      const ctx = document.getElementById("requestsOverTimeChart").getContext("2d");
-      ctx.clearRect(0, 0, ctx.canvas.width, ctx.canvas.height);
-      ctx.font = "16px Inter, sans-serif";
-      ctx.fillStyle = "#777";
-      ctx.textAlign = "center";
-      ctx.fillText("No request data yet", ctx.canvas.width / 2, ctx.canvas.height / 2);
     }
-
-
   } catch (err) {
     console.error("Dashboard load failed:", err);
   }
 }
-
 
 window.addEventListener("load", () => {
   setTimeout(() => loadClientDashboard(), 300);
@@ -526,19 +504,10 @@ window.addEventListener("load", () => {
   const filterSelect = document.getElementById("dashboardFilter");
   if (filterSelect) {
     filterSelect.addEventListener("change", () => {
-      const selectedFilter = filterSelect.value;
-      loadClientDashboard(selectedFilter);
+      loadClientDashboard(filterSelect.value);
     });
   }
 
-  // === SHOW FILTER BAR ON ACTIVE TAB (INITIAL LOAD) ===
-  const activeTab = document.querySelector(".tab-btn.active");
-  const filterBar = document.getElementById("activeFilters");
-  if (activeTab && activeTab.dataset.tab === "active") {
-    filterBar.classList.add("active");
-  }
-
-  // === AUTO-HIDE MESSAGES ===
   setTimeout(() => {
     document.querySelectorAll('.success-message, .error-message').forEach(msg => {
       msg.style.transition = 'opacity 0.5s ease';
@@ -548,12 +517,10 @@ window.addEventListener("load", () => {
   }, 4000);
 });
 
-
 // ============================================
 // PROVIDER SPOTLIGHT FUNCTIONS
 // ============================================
 
-// Book Again Function
 function bookAgain(skillId, providerName) {
   if (confirm(`Book ${providerName} again?`)) {
     document.getElementById('browseLink').click();
@@ -579,7 +546,6 @@ function bookAgain(skillId, providerName) {
   }
 }
 
-// View Provider Profile Modal  
 function viewProviderProfile(providerId, name, skill, rate, bookingCount) {
   const info = document.getElementById('contactInfo');
   

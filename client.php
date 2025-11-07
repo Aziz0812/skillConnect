@@ -333,10 +333,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['book_skill_id'])) {
 $requests_query = "
     SELECT 
         r.requestID AS RequestID,
+        r.ProviderID,
         r.Status, 
         r.Schedule, 
         COALESCE(sc.CategoryName, s.CustomCategory, 'Service') AS SkillName,
+        s.SkillID,
         s.Rate, 
+        s.RateType,
         u.FName, 
         u.LName, 
         u.Location, 
@@ -380,6 +383,19 @@ function getStatusProgress($status) {
         default: return 25;
     }
 }
+    function formatSchedulePH($schedule) {
+        if (empty($schedule) || $schedule === 'To be scheduled') {
+            return 'To be scheduled';
+        }
+        
+        $timestamp = strtotime($schedule);
+        if ($timestamp === false) {
+            return $schedule; // Return as-is if invalid
+        }
+        
+        return date('M j, Y g:i A', $timestamp);
+    }
+
 function getStatusColor($status) {
     switch(strtolower($status)) {
         case 'pending': return '#ffc107';
@@ -459,22 +475,51 @@ function renderRequestCards($requests, $type) {
             <div class="request-details">
                 <p><strong>Provider:</strong> ' . htmlspecialchars($r['FName'] . ' ' . $r['LName'], ENT_QUOTES, 'UTF-8') . '</p>
                 <p><strong>Location:</strong> ' . htmlspecialchars($r['Location'], ENT_QUOTES, 'UTF-8') . '</p>
-                <p><strong>Rate:</strong> PHP ' . number_format($r['Rate'], 2) . '/hour</p>
-                <p><strong>Schedule:</strong> ' . htmlspecialchars($r['Schedule'], ENT_QUOTES, 'UTF-8') . '</p>
+                <p><strong>Rate:</strong> PHP ' . number_format($r['Rate'], 2) . 
+                    (($r['RateType'] ?? 'hourly') === 'daily' ? '/day' : 
+                    (($r['RateType'] ?? 'hourly') === 'fixed' ? ' (fixed)' : '/hour')) . '</p>
+                <p><strong>Schedule:</strong> ' . htmlspecialchars(formatSchedulePH($r['Schedule']), ENT_QUOTES, 'UTF-8') . '</p>
             </div>
 
             <div class="request-actions">';
         
-        if ($canCancel) {
-            $html .= '<button class="btn-secondary cancel-request-btn" data-request-id="' . (int)$r['RequestID'] . '">Cancel Request</button>';
-        }
-        
-        $html .= '
+        // Active requests: Cancel + Contact
+        if ($type === 'active') {
+            if ($canCancel) {
+                $html .= '<button class="btn-secondary cancel-request-btn" data-request-id="' . (int)$r['RequestID'] . '">Cancel Request</button>';
+            }
+            $html .= '
                 <button class="btn-primary contact-provider-btn" 
                         data-provider="' . htmlspecialchars($r['FName'] . ' ' . $r['LName'], ENT_QUOTES, 'UTF-8') . '"
                         data-service="' . htmlspecialchars($r['SkillName'], ENT_QUOTES, 'UTF-8') . '">
                     Contact Provider
+                </button>';
+        }
+        
+        // Completed requests: Book Again + Rate
+        if ($type === 'completed') {
+            $html .= '
+                <button class="btn-success book-again-btn" 
+                data-skill-id="' . (int)($r['SkillID'] ?? 0) . '"
+                data-provider-id="' . (int)($r['ProviderID'] ?? 0) . '"
+                data-provider="' . htmlspecialchars($r['FName'] . ' ' . $r['LName'], ENT_QUOTES, 'UTF-8') . '">
+                    📅 Book Again
                 </button>
+                ';
+        }
+        
+        // Cancelled requests: Book Again only
+        if ($type === 'cancelled') {
+            $html .= '
+                <button class="btn-success book-again-btn" 
+                data-skill-id="' . (int)($r['SkillID'] ?? 0) . '"
+                data-provider-id="' . (int)($r['ProviderID'] ?? 0) . '"
+                data-provider="' . htmlspecialchars($r['FName'] . ' ' . $r['LName'], ENT_QUOTES, 'UTF-8') . '">
+                    📅 Book Again
+                </button>';
+        }
+        
+        $html .= '
             </div>
         </div>';
     }
@@ -492,7 +537,8 @@ function renderRequestCards($requests, $type) {
   <link rel="stylesheet" href="styles/client.css" />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap" rel="stylesheet">
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-  
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
+  <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
 </head>
 <body>
 
@@ -709,7 +755,8 @@ function renderRequestCards($requests, $type) {
                             COUNT(r.RequestID) AS BookingCount,
                             MAX(r.CreatedAt) AS LastBooked,
                             s.SkillID,
-                            s.Rate
+                            s.Rate,
+                            s.RateType
                         FROM request r
                         JOIN skills s ON r.SkillID = s.SkillID
                         JOIN users u ON r.ProviderID = u.ID
@@ -915,7 +962,7 @@ function renderRequestCards($requests, $type) {
         <h2>My Service Requests</h2>
 
         <div class="filter-bar" id="activeFilters">
-            <input type="text" id="requestSearch" placeholder="Search by provider or service..." />
+            <input type="text" id="requestSearch" placeholder="Search by service..." />
 
             <!-- Hidden real select -->
             <select id="statusFilter" style="display:none;">
@@ -975,13 +1022,38 @@ function renderRequestCards($requests, $type) {
   </div>
 </div>
 
-<div id="contactModal" class="modal" role="dialog" aria-hidden="true">
+<!-- Book Again Modal -->
+<div id="bookAgainModal" class="modal" role="dialog" aria-hidden="true">
   <div class="modal-content">
     <span class="close-btn">&times;</span>
-    <h3>Contact Provider</h3>
-    <p id="contactInfo"></p>
-    <div class="contact-note">
-        <p><strong>Note:</strong> This feature will be enhanced with direct messaging in future updates.</p>
+    <h3 id="bookAgainTitle">Book Service Again</h3>
+    <div id="bookAgainContent">
+      <form id="bookAgainForm" method="POST" action="client.php">
+        <input type="hidden" name="book_skill_id" id="rebookSkillId">
+        <input type="hidden" name="preferred_schedule" id="rebookScheduleHidden">
+        
+        <div class="form-group" style="margin-bottom: 1rem;">
+          <label style="display: block; margin-bottom: 0.5rem; font-weight: 600;">
+            📅 Select New Date & Time
+          </label>
+          <input type="text" 
+                 id="rebookDatePicker" 
+                 class="flatpickr-input" 
+                 placeholder="Pick date & time" 
+                 required 
+                 readonly
+                 style="width: 100%; padding: 10px; border: 2px solid #007bff; border-radius: 8px; font-size: 1rem;">
+        </div>
+        
+        <div class="modal-actions" style="display: flex; gap: 10px; margin-top: 1.5rem;">
+          <button type="button" class="btn-secondary" onclick="closeModal('bookAgainModal')" style="flex: 1;">
+            Cancel
+          </button>
+          <button type="submit" class="btn-primary" style="flex: 1;">
+            📅 Confirm Booking
+          </button>
+        </div>
+      </form>
     </div>
   </div>
 </div>

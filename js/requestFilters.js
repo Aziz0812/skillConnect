@@ -94,4 +94,49 @@
         params.delete("section");
         window.history.replaceState({}, document.title, window.location.pathname);
     }
+
+    const wrapper = document.querySelector('.custom-select-wrapper');
+  if (!wrapper) return;
+  
+  const customSelect = wrapper.querySelector('.custom-select');
+  const trigger = wrapper.querySelector('.custom-select__trigger');
+  const options = wrapper.querySelector('.custom-options');
+  const optionItems = wrapper.querySelectorAll('.custom-option');
+  const hiddenSelect = document.getElementById('statusFilter');
+  
+  // Toggle dropdown
+  trigger.addEventListener('click', (e) => {
+    e.stopPropagation();
+    customSelect.classList.toggle('open');
+  });
+  
+  // Handle option selection
+  optionItems.forEach(option => {
+    option.addEventListener('click', function(e) {
+      e.stopPropagation();
+      const value = this.getAttribute('data-value');
+      const text = this.textContent;
+      
+      // Update selected styling
+      optionItems.forEach(opt => opt.classList.remove('selected'));
+      this.classList.add('selected');
+      
+      // Update trigger text
+      trigger.querySelector('span').textContent = text;
+      
+      // Update hidden select
+      hiddenSelect.value = value;
+      
+      // Close dropdown
+      customSelect.classList.remove('open');
+      
+      // Trigger filter
+      hiddenSelect.dispatchEvent(new Event('change'));
+    });
+  });
+  
+  // Close on outside click
+  document.addEventListener('click', () => {
+    customSelect.classList.remove('open');
+  });
     });
