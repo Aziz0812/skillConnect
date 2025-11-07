@@ -40,6 +40,37 @@ if (isset($_COOKIE['remember_token'])) {
         if (isset($_GET['ajax']) && $_GET['ajax'] === '1') {
             header('Content-Type: application/json; charset=utf-8');
 
+            $action = $_GET['action'] ?? '';
+
+            // Public endpoint: allow clients to read provider availability
+            if ($action === 'get_availability' && isset($_GET['provider'])) {
+                $provider_id = intval($_GET['provider']);
+                if ($provider_id <= 0) {
+                    echo json_encode(['ok' => false, 'error' => 'Invalid provider']);
+                    exit;
+                }
+                $stmt = $conn->prepare(
+                    "SELECT DayOfWeek, StartTime, EndTime
+                     FROM provider_availability
+                     WHERE ProviderID = ?
+                     ORDER BY FIELD(DayOfWeek,'Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'), StartTime"
+                );
+                $stmt->bind_param("i", $provider_id);
+                $stmt->execute();
+                $res = $stmt->get_result();
+                $data = [];
+                while ($row = $res->fetch_assoc()) {
+                    $data[] = [
+                        'DayOfWeek' => trim($row['DayOfWeek']),
+                        'StartTime' => substr($row['StartTime'], 0, 8),
+                        'EndTime'   => substr($row['EndTime'], 0, 8),
+                    ];
+                }
+                echo json_encode(['ok' => true, 'data' => $data]);
+                exit;
+            }
+
+            // Provider-only endpoints below
             if (!isset($_SESSION['user_id']) || $_SESSION['role'] !== 'provider') {
                 echo json_encode(['ok' => false, 'error' => 'Unauthorized']);
                 exit;
@@ -68,33 +99,7 @@ if (isset($_COOKIE['remember_token'])) {
                 echo json_encode(['ok' => true, 'data' => $data]);
                 exit;
             }
-            /* ---------------------------
-            (4) GET AVAILABILITY (for client)
-            --------------------------- */
-            if ($action === 'get_availability' && isset($_GET['provider'])) {
-                $provider_id = intval($_GET['provider']);
-                if ($provider_id <= 0) {
-                    echo json_encode(['ok' => false, 'error' => 'Invalid provider']);
-                    exit;
-                }
-
-                $stmt = $conn->prepare("
-                    SELECT DayOfWeek, StartTime, EndTime
-                    FROM provider_availability
-                    WHERE ProviderID = ?
-                    ORDER BY FIELD(DayOfWeek,'Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday')
-                ");
-                $stmt->bind_param("i", $provider_id);
-                $stmt->execute();
-                $res = $stmt->get_result();
-                $data = [];
-                while ($row = $res->fetch_assoc()) {
-                    $data[] = $row;
-                }
-                echo json_encode(['ok' => true, 'data' => $data]);
-                exit;
-            }
-
+            
             /* ---------------------------
             (2) ADD AVAILABILITY
             --------------------------- */
@@ -241,30 +246,11 @@ if (isset($_COOKIE['remember_token'])) {
             }
 
 
-                       // --- GET AVAILABILITY (CLIENT SIDE) ---
-            if ($action === 'get_availability' && isset($_GET['provider'])) {
-                $provider_id = intval($_GET['provider']);
-                $stmt = $conn->prepare("
-                    SELECT DayOfWeek, StartTime, EndTime
-                    FROM provider_availability
-                    WHERE ProviderID = ?
-                    ORDER BY FIELD(DayOfWeek,'Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'), StartTime
-                ");
-                $stmt->bind_param("i", $provider_id);
-                $stmt->execute();
-                $res = $stmt->get_result();
-                $data = [];
-                while ($row = $res->fetch_assoc()) {
-                    $data[] = $row;
-                }
-                echo json_encode(['ok' => true, 'data' => $data]);
-                exit;
-            }
-
+                    
             // --- FALLBACK ---
             echo json_encode(['ok' => false, 'error' => 'Unknown action']);
             exit;
-        } // Ã¢Å“â€¦ closes main ajax block
+        } // End of main AJAX block
             error_log("==== COOKIE & SESSION DEBUG ====");
             error_log("COOKIES: " . print_r($_COOKIE, true));
             error_log("SESSION: " . print_r($_SESSION, true));
@@ -579,19 +565,13 @@ if (isset($_POST['delete_skill_id'])) {
 // -----------------------------
 // UPDATE JOB STATUS
 // -----------------------------
-       if (isset($_POST['update_status'])) {
-
-    // Receive return_to safely
+    if (isset($_POST['update_status'])) {
     $return_to = $_POST['return_to'] ?? '#jobs-section';
 
     // Ensure it starts with #
     if (!str_starts_with($return_to, '#')) {
         $return_to = '#jobs-section';
     }
-
-    // ✅ Build a valid redirect URL
-    // provider.php?param=value#section
-    $redirect_url = 'provider.php?job_updated=1' . $return_to;
 
     $request_id = intval($_POST['request_id'] ?? 0);
     $new_status = $_POST['new_status'] ?? '';
@@ -603,14 +583,16 @@ if (isset($_POST['delete_skill_id'])) {
 
         if ($stmt->execute()) {
             $stmt->close();
+            // ✅ FIXED: Use add_query_before_hash to preserve hash
+            $redirect_url = add_query_before_hash($return_to, 'job_updated', '1');
             redirect_with_message('success', 'Status updated successfully!', $redirect_url);
         } else {
             $err = $conn->error;
             if ($stmt) $stmt->close();
-            redirect_with_message('error', "Error updating status: $err", $redirect_url);
+            redirect_with_message('error', "Error updating status: $err", $return_to);
         }
     } else {
-        redirect_with_message('error', 'Invalid status.', $redirect_url);
+        redirect_with_message('error', 'Invalid status.', $return_to);
     }
 }
 
@@ -729,7 +711,8 @@ if ($stmt->execute()) {
 // GET JOB REQUESTS
 // -----------------------------
 $requests_query = "
-    SELECT r.RequestID, r.Status, r.Schedule, COALESCE(c.CategoryName, s.CustomCategory) AS SkillName, u.FName, u.LName, u.Location
+    SELECT r.RequestID, r.Status, r.Schedule, COALESCE(c.CategoryName, s.CustomCategory) AS SkillName, 
+    u.FName, u.LName, u.Avatar, u.Barangay, u.City, u.Province
     FROM request r
     JOIN skills s ON r.SkillID = s.SkillID
     LEFT JOIN skill_categories c ON s.CategoryID = c.CategoryID

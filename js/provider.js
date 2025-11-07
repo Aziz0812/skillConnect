@@ -3,17 +3,22 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // ✅ Handle all skill-related redirects in ONE place
   if (window.location.search.includes('skill_added=1') || 
-      window.location.search.includes('updated=1') ||
-      window.location.search.includes('deleted=1')) {
-      
-      // Clean URL immediately
-      const cleanUrl = window.location.pathname + "#skills-section";
-      window.history.replaceState({}, '', cleanUrl);
-      
-      // Set proper state
-      window.location.hash = '#skills-section';
-      localStorage.setItem('activeSection', 'skills-section');
-  }
+    window.location.search.includes('updated=1') ||
+    window.location.search.includes('deleted=1')) {
+    
+    // Clean URL and set hash in one operation
+    const cleanUrl = window.location.pathname + "#skills-section";
+    window.history.replaceState({}, '', cleanUrl);
+    localStorage.setItem('activeSection', 'skills-section');
+}
+// Handle job status updates
+if (window.location.search.includes('job_updated=1')) {
+    // Clean URL and set hash in one operation
+    const hash = window.location.hash || '#jobs-section';
+    const cleanUrl = window.location.pathname + hash;
+    window.history.replaceState({}, '', cleanUrl);
+    localStorage.setItem('activeSection', 'jobs-section');
+}
 
   console.log('provider.js loaded ✅');
 

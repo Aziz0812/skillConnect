@@ -9,10 +9,36 @@ function initializeDatePickers() {
     
     const form = input.closest('form');
     const hiddenInput = form?.querySelector('input[name="preferred_schedule"]');
+    const providerIdInput = form?.querySelector('input[name="provider_id"]');
     const skillIdInput = form?.querySelector('input[name="book_skill_id"]');
-    const providerId = skillIdInput?.value;
+    const providerId = providerIdInput?.value || skillIdInput?.value || '';
     
-    flatpickr(input, {
+    // Cache availability per input instance
+    let cachedAvailability = null;
+
+    // Ensure a hint container exists under the input
+    let hint = form?.querySelector('.schedule-hint');
+    if (!hint) {
+      hint = document.createElement('div');
+      hint.className = 'schedule-hint';
+      hint.style.fontSize = '0.85rem';
+      hint.style.marginTop = '6px';
+      hint.style.color = '#6c757d';
+      input.parentElement?.appendChild(hint);
+    }
+    // Ensure a pills container exists under the hint
+    let pills = form?.querySelector('.availability-pills');
+    if (!pills) {
+      pills = document.createElement('div');
+      pills.className = 'availability-pills';
+      if (hint && hint.parentElement) {
+        hint.parentElement.appendChild(pills);
+      } else {
+        input.parentElement?.appendChild(pills);
+      }
+    }
+
+    const fp = flatpickr(input, {
       enableTime: true,
       dateFormat: "F j, Y at h:i K",
       altInput: true,
@@ -21,60 +47,198 @@ function initializeDatePickers() {
       time_24hr: false,
       minuteIncrement: 15,
       onChange: function(selectedDates, dateStr, instance) {
-        // Convert to Y-m-d\TH:i format for backend
-        if (selectedDates[0] && hiddenInput) {
-          const date = selectedDates[0];
-          const year = date.getFullYear();
-          const month = String(date.getMonth() + 1).padStart(2, '0');
-          const day = String(date.getDate()).padStart(2, '0');
-          const hours = String(date.getHours()).padStart(2, '0');
-          const minutes = String(date.getMinutes()).padStart(2, '0');
-          hiddenInput.value = `${year}-${month}-${day}T${hours}:${minutes}`;
+        if (!selectedDates[0]) return;
+
+        // reset hint state
+        if (hint) { hint.classList.remove('error'); hint.style.color = '#6c757d'; }
+
+        const date = selectedDates[0];
+        const year = date.getFullYear();
+        const month = String(date.getMonth() + 1).padStart(2, '0');
+        const day = String(date.getDate()).padStart(2, '0');
+        const hours = String(date.getHours()).padStart(2, '0');
+        const minutes = String(date.getMinutes()).padStart(2, '0');
+        const isoVal = `${year}-${month}-${day}T${hours}:${minutes}`;
+
+        // Validate against availability if present
+        if (cachedAvailability && Array.isArray(cachedAvailability) && cachedAvailability.length > 0) {
+          const weekday = date.toLocaleDateString('en-US', { weekday: 'long' });
+          const totalMinutes = parseInt(hours, 10) * 60 + parseInt(minutes, 10);
+          const isValid = cachedAvailability.some(slot => {
+            if (slot.DayOfWeek !== weekday) return false;
+            const [sh, sm] = slot.StartTime.split(':').map(Number);
+            const [eh, em] = slot.EndTime.split(':').map(Number);
+            const startM = sh * 60 + sm;
+            const endM = eh * 60 + em;
+            return totalMinutes >= startM && totalMinutes <= endM;
+          });
+          if (!isValid) {
+            // Clear and inline notify
+            if (hiddenInput) hiddenInput.value = '';
+            instance.clear();
+            if (hint) {
+              const weekday = date.toLocaleDateString('en-US', { weekday: 'long' });
+              const ranges = cachedAvailability
+                .filter(s => s.DayOfWeek === weekday)
+                .map(s => `${s.StartTime.substring(0,5)}–${s.EndTime.substring(0,5)}`)
+                .join(', ');
+              hint.textContent = ranges ? `Outside provider hours for ${weekday} (${ranges}).` : `Provider is unavailable on ${weekday}.`;
+              hint.classList.add('error');
+              hint.style.color = '#dc3545';
+            }
+            return;
+          }
+        }
+
+        // Set hidden input for backend
+        if (hiddenInput) hiddenInput.value = isoVal;
+        if (hint) {
+          const weekday = date.toLocaleDateString('en-US', { weekday: 'long' });
+          const ranges = cachedAvailability && Array.isArray(cachedAvailability)
+            ? cachedAvailability.filter(s => s.DayOfWeek === weekday).map(s => `${s.StartTime.substring(0,5)}–${s.EndTime.substring(0,5)}`).join(', ')
+            : '';
+          hint.textContent = ranges ? `Available on ${weekday}: ${ranges}` : '';
+          hint.classList.remove('error');
+          hint.style.color = '#198754';
         }
       },
       onReady: async function(selectedDates, dateStr, instance) {
-        // Fetch provider availability
-        if (!providerId) return;
-        
+        // Fetch provider availability and disable days not offered by provider
+        if (hint) hint.textContent = 'Fetching provider availability...';
+        if (!providerId) { if (hint) hint.textContent = ''; return; }
         try {
           const res = await fetch(`provider.php?ajax=1&action=get_availability&provider=${providerId}`);
           const data = await res.json();
-          
-          if (data.ok && data.data.length > 0) {
-            const availability = data.data;
-            
-            // Disable dates where provider is NOT available
+          if (data.ok && Array.isArray(data.data) && data.data.length > 0) {
+            cachedAvailability = data.data;
+            const availableDays = new Set(cachedAvailability.map(s => s.DayOfWeek));
             instance.set('disable', [
               function(date) {
                 const dayName = date.toLocaleDateString('en-US', { weekday: 'long' });
-                const hours = date.getHours();
-                const minutes = date.getMinutes();
-                const timeInMinutes = hours * 60 + minutes;
-                
-                // Check if this day+time is available
-                const isAvailable = availability.some(slot => {
-                  if (slot.DayOfWeek !== dayName) return false;
-                  
-                  // Convert slot times to minutes
-                  const [startH, startM] = slot.StartTime.split(':').map(Number);
-                  const [endH, endM] = slot.EndTime.split(':').map(Number);
-                  const startMinutes = startH * 60 + startM;
-                  const endMinutes = endH * 60 + endM;
-                  
-                  return timeInMinutes >= startMinutes && timeInMinutes <= endMinutes;
-                });
-                
-                return !isAvailable; // Disable if NOT available
+                return !availableDays.has(dayName);
               }
             ]);
-            
-            console.log('Provider availability loaded:', availability);
+
+            // Decorate disabled days with tooltip
+            instance.set('onDayCreate', [function(dObj, dStr, fp, dayElem) {
+              const dayName = dayElem.dateObj.toLocaleDateString('en-US', { weekday: 'long' });
+              if (!availableDays.has(dayName)) {
+                dayElem.classList.add('unavailable-day');
+                dayElem.setAttribute('title', `Unavailable: Provider does not work on ${dayName}`);
+              }
+            }]);
+
+            // Render availability summary and pills
+            const order = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
+            if (hint) {
+              const byDay = order.map(day => ({ day, slots: cachedAvailability.filter(s => s.DayOfWeek === day) }));
+              const working = byDay.filter(d => d.slots.length > 0);
+              const off = byDay.filter(d => d.slots.length === 0).map(d => d.day);
+              const ranges = working.map(d => `${d.day.substring(0,3)}: ${d.slots.map(s => s.StartTime.substring(0,5)+"–"+s.EndTime.substring(0,5)).join(' | ')}`).join('  •  ');
+              hint.textContent = ranges ? `Availability • ${ranges}${off.length ? `  •  Off: ${off.join(', ')}` : ''}` : 'Availability not provided';
+              hint.style.color = '#6c757d';
+              hint.classList.remove('error');
+            }
+            if (pills) {
+              pills.innerHTML = order
+                .map(d => `<span class="pill ${availableDays.has(d) ? 'on' : 'off'}">${d.substring(0,3)}</span>`)
+                .join('');
+            }
+          } else {
+            if (hint) { hint.textContent = 'Availability not provided'; hint.style.color = '#6c757d'; }
           }
         } catch (err) {
           console.error('Failed to load availability:', err);
+          if (hint) { hint.textContent = 'Failed to load availability'; hint.style.color = '#dc3545'; }
         }
       }
     });
+
+    // Prevent form submission if invalid or empty schedule
+    if (form) {
+      form.addEventListener('submit', (e) => {
+        // if hidden input missing or empty, block
+        if (!hiddenInput || !hiddenInput.value) {
+          e.preventDefault();
+          // Inline fading error (no showToast dependency)
+          let hintLocal = form.querySelector('.schedule-hint');
+          if (!hintLocal) {
+            hintLocal = document.createElement('div');
+            hintLocal.className = 'schedule-hint error';
+            if (input && input.parentElement) input.parentElement.appendChild(hintLocal);
+            else form.appendChild(hintLocal);
+          }
+          hintLocal.classList.add('error');
+          hintLocal.style.color = '#991b1b';
+          hintLocal.textContent = 'Please set a date and time before booking.';
+          // auto dismiss after 3s with smooth fade
+          hintLocal.style.transition = 'opacity 0.5s ease';
+          setTimeout(() => {
+            hintLocal.style.opacity = '0';
+            setTimeout(() => { hintLocal.remove(); }, 500);
+          }, 3000);
+          if (input) input.focus();
+          return;
+        }
+        // If we have availability, validate again on submit as a safety net
+        if (cachedAvailability && Array.isArray(cachedAvailability) && cachedAvailability.length > 0) {
+          const val = hiddenInput.value; // format YYYY-MM-DDTHH:mm
+          const [d, t] = val.split('T');
+          if (!d || !t) {
+            e.preventDefault();
+            // inline fading error
+            let hintLocal = form.querySelector('.schedule-hint');
+            if (!hintLocal) {
+              hintLocal = document.createElement('div');
+              hintLocal.className = 'schedule-hint error';
+              if (input && input.parentElement) input.parentElement.appendChild(hintLocal);
+              else form.appendChild(hintLocal);
+            }
+            hintLocal.classList.add('error');
+            hintLocal.style.color = '#991b1b';
+            hintLocal.textContent = 'Please set a valid date and time before booking.';
+            hintLocal.style.transition = 'opacity 0.5s ease';
+            setTimeout(() => { hintLocal.style.opacity = '0'; setTimeout(() => hintLocal.remove(), 500); }, 3000);
+            return;
+          }
+          const [yy, mm, dd] = d.split('-').map(Number);
+          const [HH, MM] = t.split(':').map(Number);
+          const dt = new Date(yy, mm - 1, dd, HH, MM);
+          const weekday = dt.toLocaleDateString('en-US', { weekday: 'long' });
+          const totalMinutes = HH * 60 + MM;
+          const isValid = cachedAvailability.some(slot => {
+            if (slot.DayOfWeek !== weekday) return false;
+            const [sh, sm] = slot.StartTime.split(':').map(Number);
+            const [eh, em] = slot.EndTime.split(':').map(Number);
+            const startM = sh * 60 + sm;
+            const endM = eh * 60 + em;
+            return totalMinutes >= startM && totalMinutes <= endM;
+          });
+          if (!isValid) {
+            e.preventDefault();
+            let hintLocal = form.querySelector('.schedule-hint');
+            if (!hintLocal) {
+              hintLocal = document.createElement('div');
+              hintLocal.className = 'schedule-hint error';
+              if (input && input.parentElement) input.parentElement.appendChild(hintLocal);
+              else form.appendChild(hintLocal);
+            }
+            // find weekday ranges for message
+            const dtWeekday = new Date(yy, mm - 1, dd).toLocaleDateString('en-US', { weekday: 'long' });
+            const ranges = cachedAvailability
+              .filter(s => s.DayOfWeek === dtWeekday)
+              .map(s => `${s.StartTime.substring(0,5)}–${s.EndTime.substring(0,5)}`)
+              .join(', ');
+            hintLocal.textContent = ranges ? `Outside provider hours for ${dtWeekday} (${ranges}).` : `Provider is unavailable on ${dtWeekday}.`;
+            hintLocal.classList.add('error');
+            hintLocal.style.color = '#991b1b';
+            hintLocal.style.transition = 'opacity 0.5s ease';
+            setTimeout(() => { hintLocal.style.opacity = '0'; setTimeout(() => hintLocal.remove(), 500); }, 3000);
+            return;
+          }
+        }
+      });
+    }
   });
 }
 
@@ -86,11 +250,17 @@ document.addEventListener("DOMContentLoaded", () => {
   // Initialize date pickers on load
   setTimeout(() => initializeDatePickers(), 500);
 
-  // === SECTION NAVIGATION ===
+ // === SECTION NAVIGATION ===
   function showSection(sectionId) {
-    const section = document.getElementById(sectionId);
+    // ⚠️ NORMALIZE SECTION ID (handle both "browse" and "browseSection")
+    let normalizedId = sectionId;
+    if (!sectionId.endsWith('Section')) {
+      normalizedId = sectionId + 'Section';
+    }
+    
+    const section = document.getElementById(normalizedId);
     if (!section) {
-        console.warn(`Section ${sectionId} not found`);
+        console.warn(`Section ${normalizedId} not found`);
         return;
     }
 
@@ -109,17 +279,17 @@ document.addEventListener("DOMContentLoaded", () => {
         "browseSection": "browseLink",
         "requestSection": "requestsLink"
     };
-    const linkId = linkMap[sectionId];
+    const linkId = linkMap[normalizedId];
     if (linkId) {
         const link = document.getElementById(linkId);
         if (link) link.classList.add("active");
     }
 
     // Save active section
-    sessionStorage.setItem("activeSection", sectionId);
+    sessionStorage.setItem("activeSection", normalizedId);
 
     // Default to Active tab in Requests
-    if (sectionId === "requestSection") {
+    if (normalizedId === "requestSection") {
         document.querySelectorAll(".tab-btn").forEach(b => b.classList.remove("active"));
         document.querySelectorAll(".request-section").forEach(sec => sec.classList.remove("active"));
         const activeTab = document.querySelector('.tab-btn[data-tab="active"]');
@@ -129,7 +299,7 @@ document.addEventListener("DOMContentLoaded", () => {
     }
 
     // Re-init date pickers when switching sections
-    if (sectionId === "browseSection") {
+    if (normalizedId === "browseSection") {
       setTimeout(() => initializeDatePickers(), 300);
     }
 
@@ -144,7 +314,7 @@ document.addEventListener("DOMContentLoaded", () => {
             behavior: "smooth"
         });
     }, 100);
-}
+  }
 
   // === NAV LINKS ===
   const dashboardLink = document.getElementById("dashboardLink");
@@ -185,11 +355,15 @@ document.addEventListener("DOMContentLoaded", () => {
 
   // === MODALS ===
   function openModal(id) {
-    document.getElementById(id).classList.add("show");
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.classList.add("show");
     document.body.style.overflow = "hidden";
   }
   function closeModal(id) {
-    document.getElementById(id).classList.remove("show");
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.classList.remove("show");
     document.body.style.overflow = "auto";
   }
 
@@ -211,9 +385,9 @@ document.addEventListener("DOMContentLoaded", () => {
   const fullDescription = document.getElementById("fullDescription");
   document.querySelectorAll(".read-more-btn").forEach(btn => {
     btn.addEventListener("click", () => {
-      fullDescription.innerHTML = btn
-        .getAttribute("data-description")
-        .replace(/\n/g, "<br>");
+      if (!fullDescription) return;
+      const desc = btn.getAttribute("data-description") || "";
+      fullDescription.innerHTML = desc.replace(/\n/g, "<br>");
       openModal("descModal");
     });
   });
@@ -222,8 +396,9 @@ document.addEventListener("DOMContentLoaded", () => {
   const contactInfo = document.getElementById("contactInfo");
   document.querySelectorAll(".contact-provider-btn").forEach(btn => {
     btn.addEventListener("click", () => {
-      const providerName = btn.getAttribute("data-provider");
-      const serviceName = btn.getAttribute("data-service");
+      if (!contactInfo) return;
+      const providerName = btn.getAttribute("data-provider") || "";
+      const serviceName = btn.getAttribute("data-service") || "";
       contactInfo.innerHTML = `
         <p><strong>Provider:</strong> ${providerName}</p>
         <p><strong>Service:</strong> ${serviceName}</p>
@@ -259,20 +434,80 @@ document.addEventListener("DOMContentLoaded", () => {
     return div;
   }
 
-  // === BOOKING ANIMATION + AJAX ===
+ // === BOOKING ANIMATION + AJAX ===
   document.querySelectorAll(".book-form").forEach(form => {
     form.addEventListener("submit", function(e) {
-      e.preventDefault();
+      e.preventDefault(); // ⚠️ CRITICAL: Prevent default form submission
+      
+      const hidden = form.querySelector('input[name="preferred_schedule"]');
+      const input = form.querySelector('.flatpickr-input');
+      
+      // Validate schedule is selected
+      if (!hidden || !hidden.value) {
+        if (input) input.focus();
+        let hint = form.querySelector('.schedule-hint');
+        if (!hint) {
+          hint = document.createElement('div');
+          hint.className = 'schedule-hint error';
+          if (input && input.parentElement) input.parentElement.appendChild(hint);
+          else form.appendChild(hint);
+        }
+        hint.classList.add('error');
+        hint.style.color = '#991b1b';
+        hint.textContent = 'Please set a date and time before booking.';
+        return;
+      }
+      
+      // Valid: apply animation
       const card = this.closest(".provider-card");
-
-      card.style.transition = "opacity 0.4s ease, transform 0.4s ease";
-      card.style.opacity = "0";
-      card.style.transform = "translateY(20px)";
-      showToast("Service booked successfully!", "success");
-
-      setTimeout(() => {
-        this.submit();
-      }, 400);
+      if (card) {
+        card.style.transition = "opacity 0.4s ease, transform 0.4s ease";
+        card.style.opacity = "0.6";
+        card.style.transform = "translateY(4px)";
+      }
+      
+      // Get form data
+      const formData = new FormData(this);
+      const skillId = formData.get('book_skill_id');
+      const schedule = formData.get('preferred_schedule');
+      
+      // Submit via AJAX
+      fetch('book_skill.php', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded',
+        },
+        body: `skill_id=${encodeURIComponent(skillId)}&preferred_schedule=${encodeURIComponent(schedule)}`
+      })
+      .then(res => res.json())
+      .then(data => {
+        if (data.success) {
+          // Success - redirect to requests section
+          window.location.href = 'client.php?section=requestSection&success=1';
+        } else if (data.error === 'already_booked') {
+          // Already have active booking
+          showToast(data.message || 'You already have an active booking for this service.', 'error');
+          if (card) {
+            card.style.opacity = "1";
+            card.style.transform = "translateY(0)";
+          }
+        } else {
+          // Other error
+          showToast(data.message || 'Booking failed. Please try again.', 'error');
+          if (card) {
+            card.style.opacity = "1";
+            card.style.transform = "translateY(0)";
+          }
+        }
+      })
+      .catch(err => {
+        console.error('Booking error:', err);
+        showToast('Network error. Please try again.', 'error');
+        if (card) {
+          card.style.opacity = "1";
+          card.style.transform = "translateY(0)";
+        }
+      });
     });
   });
 
@@ -309,41 +544,78 @@ document.addEventListener("DOMContentLoaded", () => {
     });
   });
     // === BOOK AGAIN FUNCTIONALITY ===
+  
   document.querySelectorAll(".book-again-btn").forEach(btn => {
     btn.addEventListener("click", function() {
       const skillId = this.getAttribute("data-skill-id");
       const providerName = this.getAttribute("data-provider");
+      const providerId = this.getAttribute("data-provider-id");
       
-      if (confirm(`Book ${providerName} again?`)) {
-        document.getElementById('browseLink').click();
-        
-        setTimeout(() => {
-          const cards = document.querySelectorAll('.provider-card');
-          cards.forEach(card => {
-            const bookForm = card.querySelector('form[method="POST"]');
-            if (bookForm) {
-              const skillInput = bookForm.querySelector('input[name="book_skill_id"]');
-              if (skillInput && skillInput.value === skillId) {
-                card.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                card.style.border = '3px solid #28a745';
-                card.style.boxShadow = '0 0 30px rgba(40, 167, 69, 0.4)';
-                
-                setTimeout(() => {
-                  card.style.border = '';
-                  card.style.boxShadow = '';
-                }, 3000);
-              }
-            }
-          });
-        }, 500);
+      // Set modal title
+      const titleEl = document.getElementById('bookAgainTitle');
+      if (titleEl) titleEl.textContent = `Book ${providerName || ''} Again`;
+      
+      // Set hidden skill ID
+      const rebookSkillIdEl = document.getElementById('rebookSkillId');
+      if (rebookSkillIdEl) rebookSkillIdEl.value = skillId || '';
+      
+      // Initialize flatpickr for rebook
+      const rebookPicker = document.getElementById('rebookDatePicker');
+      if (!rebookPicker) { openModal('bookAgainModal'); return; }
+      if (rebookPicker._flatpickr) {
+        rebookPicker._flatpickr.destroy();
       }
+      
+      flatpickr(rebookPicker, {
+        enableTime: true,
+        dateFormat: "F j, Y at h:i K",
+        altInput: true,
+        altFormat: "F j, Y at h:i K",
+        minDate: "today",
+        time_24hr: false,
+        minuteIncrement: 15,
+        onChange: function(selectedDates, dateStr, instance) {
+          if (selectedDates[0]) {
+            const date = selectedDates[0];
+            const year = date.getFullYear();
+            const month = String(date.getMonth() + 1).padStart(2, '0');
+            const day = String(date.getDate()).padStart(2, '0');
+            const hours = String(date.getHours()).padStart(2, '0');
+            const minutes = String(date.getMinutes()).padStart(2, '0');
+            document.getElementById('rebookScheduleHidden').value = `${year}-${month}-${day}T${hours}:${minutes}`;
+          }
+        },
+        onReady: async function(selectedDates, dateStr, instance) {
+          // Fetch provider availability if providerId exists and disable days not offered
+          if (!providerId) return;
+          try {
+            const res = await fetch(`provider.php?ajax=1&action=get_availability&provider=${providerId}`);
+            const data = await res.json();
+            if (data.ok && Array.isArray(data.data) && data.data.length > 0) {
+              const availability = data.data;
+              const availableDays = new Set(availability.map(s => s.DayOfWeek));
+              instance.set('disable', [
+                function(date) {
+                  const dayName = date.toLocaleDateString('en-US', { weekday: 'long' });
+                  return !availableDays.has(dayName);
+                }
+              ]);
+            }
+          } catch (err) {
+            console.error('Failed to load availability:', err);
+          }
+        }
+      });
+      
+      // Open modal
+      openModal('bookAgainModal');
     });
   });
 
   // === PROGRESS BAR ANIMATION ===
   function animateProgressBars() {
     document.querySelectorAll(".progress-fill").forEach(bar => {
-      const width = bar.style.width;
+      const width = bar.style.width || getComputedStyle(bar).width;
       bar.style.width = "0%";
       setTimeout(() => { bar.style.width = width; }, 300);
     });
@@ -384,7 +656,9 @@ document.addEventListener("DOMContentLoaded", () => {
         const res = await fetch(`client.php?ajax=1&action=requests_over_time&filter=${filter}`);
         const chartData = await res.json();
 
-        const ctx = document.getElementById("requestsOverTimeChart").getContext("2d");
+        const canvas = document.getElementById("requestsOverTimeChart");
+        if (!canvas) return;
+        const ctx = canvas.getContext("2d");
 
         if (chartData.ok && chartData.data.length > 0) {
           const labels = chartData.data.map(r => r.Month);
@@ -444,13 +718,16 @@ async function loadClientDashboard(filter = "all") {
       const data = summary.data || {};
       function animateCount(id, endValue) {
         const el = document.getElementById(id);
+        if (!el) return;
+        const safeEnd = Number.isFinite(endValue) && endValue > 0 ? Math.floor(endValue) : 0;
+        if (safeEnd === 0) { el.textContent = 0; return; }
         let start = 0;
         const duration = 1000;
-        const stepTime = Math.max(Math.floor(duration / endValue), 20);
+        const stepTime = Math.max(Math.floor(duration / safeEnd), 20);
         const timer = setInterval(() => {
           start++;
           el.textContent = start;
-          if (start >= endValue) clearInterval(timer);
+          if (start >= safeEnd) clearInterval(timer);
         }, stepTime);
       }
 
@@ -463,7 +740,9 @@ async function loadClientDashboard(filter = "all") {
     const chartData = await chartRes.json();
 
     if (chartData.ok && chartData.data.length > 0) {
-      const ctx = document.getElementById("requestsOverTimeChart").getContext("2d");
+      const canvas = document.getElementById("requestsOverTimeChart");
+      if (!canvas) return;
+      const ctx = canvas.getContext("2d");
       const labels = chartData.data.map(r => r.Month);
       const counts = chartData.data.map(r => r.Count);
 
@@ -501,15 +780,11 @@ async function loadClientDashboard(filter = "all") {
 window.addEventListener("load", () => {
   setTimeout(() => loadClientDashboard(), 300);
 
-  const filterSelect = document.getElementById("dashboardFilter");
-  if (filterSelect) {
-    filterSelect.addEventListener("change", () => {
-      loadClientDashboard(filterSelect.value);
-    });
-  }
-
+  // Cleanup only toasts inside the toast container to avoid removing unrelated elements
   setTimeout(() => {
-    document.querySelectorAll('.success-message, .error-message').forEach(msg => {
+    const container = document.querySelector('.toast-container');
+    if (!container) return;
+    container.querySelectorAll('.success-message, .error-message').forEach(msg => {
       msg.style.transition = 'opacity 0.5s ease';
       msg.style.opacity = '0';
       setTimeout(() => msg.remove(), 500);

@@ -123,7 +123,9 @@ document.addEventListener('DOMContentLoaded', () => {
                             </button>
                             <form method="POST" class="book-form" style="display:inline;">
                                 <input type="hidden" name="book_skill_id" value="${parseInt(p.SkillID) || 0}">
-                                <input type="datetime-local" name="preferred_schedule" required>
+                                <input type="hidden" name="provider_id" value="${parseInt(p.UserID) || 0}">
+                                <input type="text" class="flatpickr-input" placeholder="Pick date & time" required readonly>
+                                <input type="hidden" name="preferred_schedule" value="">
                                 <button type="submit" class="btn-primary book-btn">Book Now</button>
                             </form>
                         </div>
@@ -133,7 +135,12 @@ document.addEventListener('DOMContentLoaded', () => {
 
         // Re-attach event listeners
         reattachEventListeners();
+        
+        // ⚠️ CRITICAL: Re-initialize flatpickr for dynamically loaded forms
+        setTimeout(() => initializeDatePickers(), 100);
     }
+
+        
 
     // Escape HTML to prevent XSS
     function escapeHtml(text) {
@@ -151,21 +158,99 @@ document.addEventListener('DOMContentLoaded', () => {
                 const fullDescription = document.getElementById('fullDescription');
                 if (fullDescription) {
                     fullDescription.innerHTML = description.replace(/\n/g, '<br>');
-                    document.getElementById('descModal').classList.add('show');
-                    document.body.style.overflow = 'hidden';
+                    const modal = document.getElementById('descModal');
+                    if (modal) {
+                        modal.classList.add('show');
+                        document.body.style.overflow = 'hidden';
+                    }
                 }
             });
         });
 
-        // Book forms
+        // ⚠️ Book forms now handled by event delegation in client.js
+        // The AJAX handler will pick up these forms automatically
         document.querySelectorAll('.book-form').forEach(form => {
             form.addEventListener('submit', function(e) {
-                const card = this.closest('.provider-card');
-                if (card) {
-                    card.style.transition = 'opacity 0.4s ease, transform 0.4s ease';
-                    card.style.opacity = '0';
-                    card.style.transform = 'translateY(20px)';
+                e.preventDefault(); // Prevent default, let AJAX handler take over
+                
+                const hidden = form.querySelector('input[name="preferred_schedule"]');
+                const input = form.querySelector('.flatpickr-input');
+                
+                // Validate schedule
+                if (!hidden || !hidden.value) {
+                    if (input) input.focus();
+                    let hint = form.querySelector('.schedule-hint');
+                    if (!hint) {
+                        hint = document.createElement('div');
+                        hint.className = 'schedule-hint error';
+                        if (input && input.parentElement) input.parentElement.appendChild(hint);
+                        else form.appendChild(hint);
+                    }
+                    hint.classList.add('error');
+                    hint.style.color = '#991b1b';
+                    hint.textContent = 'Please set a date and time before booking.';
+                    return;
                 }
+                
+                // Apply animation
+                const card = this.closest(".provider-card");
+                if (card) {
+                    card.style.transition = "opacity 0.4s ease, transform 0.4s ease";
+                    card.style.opacity = "0.6";
+                    card.style.transform = "translateY(4px)";
+                }
+                
+                // Get form data
+                const formData = new FormData(this);
+                const skillId = formData.get('book_skill_id');
+                const schedule = formData.get('preferred_schedule');
+                
+                // Submit via AJAX
+                fetch('book_skill.php', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/x-www-form-urlencoded',
+                    },
+                    body: `skill_id=${encodeURIComponent(skillId)}&preferred_schedule=${encodeURIComponent(schedule)}`
+                })
+                .then(res => res.json())
+                .then(data => {
+                    if (data.success) {
+                        window.location.href = 'client.php?section=requestSection&success=1';
+                    } else if (data.error === 'already_booked') {
+                        if (typeof showToast === 'function') {
+                            showToast(data.message || 'You already have an active booking for this service.', 'error');
+                        } else {
+                            alert(data.message);
+                        }
+                        if (card) {
+                            card.style.opacity = "1";
+                            card.style.transform = "translateY(0)";
+                        }
+                    } else {
+                        if (typeof showToast === 'function') {
+                            showToast(data.message || 'Booking failed. Please try again.', 'error');
+                        } else {
+                            alert(data.message);
+                        }
+                        if (card) {
+                            card.style.opacity = "1";
+                            card.style.transform = "translateY(0)";
+                        }
+                    }
+                })
+                .catch(err => {
+                    console.error('Booking error:', err);
+                    if (typeof showToast === 'function') {
+                        showToast('Network error. Please try again.', 'error');
+                    } else {
+                        alert('Network error. Please try again.');
+                    }
+                    if (card) {
+                        card.style.opacity = "1";
+                        card.style.transform = "translateY(0)";
+                    }
+                });
             });
         });
     }

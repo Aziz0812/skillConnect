@@ -274,6 +274,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['book_skill_id'])) {
         exit();
     }
 
+    // Resolve provider from skill
     $stmt = $conn->prepare("SELECT UserID FROM skills WHERE SkillID = ?");
     $stmt->bind_param("i", $skill_id);
     $stmt->execute();
@@ -282,13 +283,40 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['book_skill_id'])) {
 
     if ($skill) {
         $provider_id = (int)$skill['UserID'];
-        $status = "Pending";
 
+        // Server-side availability enforcement
+        // Compute weekday name and HH:MM from preferred_schedule
+        $weekday = date('l', $scheduleTime); // Monday..Sunday
+        $hhmm = date('H:i', $scheduleTime);
+
+        // Fetch availability slots for this provider and weekday
+        $av = $conn->prepare("SELECT StartTime, EndTime FROM provider_availability WHERE ProviderID = ? AND DayOfWeek = ?");
+        $av->bind_param("is", $provider_id, $weekday);
+        $av->execute();
+        $avRes = $av->get_result();
+
+        $allowed = false;
+        while ($row = $avRes->fetch_assoc()) {
+            // Compare times as strings HH:MM which works lexicographically
+            $start = substr($row['StartTime'], 0, 5); // HH:MM
+            $end = substr($row['EndTime'], 0, 5);     // HH:MM
+            if ($hhmm >= $start && $hhmm <= $end) {
+                $allowed = true;
+                break;
+            }
+        }
+
+        if (!$allowed) {
+            header("Location: client.php?error=unavailable_slot&section=browse");
+            exit();
+        }
+
+        $status = "Pending";
         $insert = $conn->prepare("INSERT INTO request (ClientID, ProviderID, SkillID, Status, Schedule, CreatedAt) VALUES (?, ?, ?, ?, ?, NOW())");
         $insert->bind_param("iiiss", $client_id, $provider_id, $skill_id, $status, $preferred_schedule);
         
         if ($insert->execute()) {
-            header("Location: client.php?success=1&section=request");
+            header("Location: client.php?success=1&section=requestSection");
             exit();
         } else {
             header("Location: client.php?error=booking_failed&section=browse");
@@ -536,9 +564,10 @@ function renderRequestCards($requests, $type) {
   <title>Client Dashboard | SkillConnect</title>
   <link rel="stylesheet" href="styles/client.css" />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap" rel="stylesheet">
-  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
-  <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
+  <script src="js/vendor/chart.umd.min.js"></script>
+  <link rel="stylesheet" href="styles/vendor/flatpickr.min.css">
+  <script src="js/vendor/flatpickr.min.js"></script>
+<link rel="stylesheet" href="styles/vendor/flatpickr.min.css">
 </head>
 <body>
 
@@ -947,6 +976,7 @@ function renderRequestCards($requests, $type) {
                             </button>
                             <form method="POST" class="book-form ajax-book-form" style="display:inline;">
                                 <input type="hidden" name="book_skill_id" value="<?= (int)($p['SkillID'] ?? 0); ?>">
+                                <input type="hidden" name="provider_id" value="<?= (int)($p['UserID'] ?? 0); ?>">
                                 <input type="text" class="flatpickr-input" placeholder="Pick date & time" required readonly>
                                 <input type="hidden" name="preferred_schedule" value="">
                                 <button type="submit" class="btn-primary book-btn">Book Now</button>
@@ -1058,6 +1088,8 @@ function renderRequestCards($requests, $type) {
   </div>
 </div>
 
+<script src="js/vendor/flatpickr.min.js"></script>
+<script src="js/vendor/chart.umd.min.js"></script>
 <script src="js/client.js"></script>
 <script src="js/browse.js"></script>
 <script src="js/requestFilters.js"></script>
