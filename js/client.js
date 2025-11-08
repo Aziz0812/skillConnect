@@ -72,17 +72,28 @@ function initializeDatePickers() {
             const endM = eh * 60 + em;
             return totalMinutes >= startM && totalMinutes <= endM;
           });
+
           if (!isValid) {
             // Clear and inline notify
             if (hiddenInput) hiddenInput.value = '';
             instance.clear();
             if (hint) {
               const weekday = date.toLocaleDateString('en-US', { weekday: 'long' });
+              
+              // Helper function for 12hr format
+              function formatTime12hr(time24) {
+                if (!time24) return '';
+                const [hours, minutes] = time24.split(':').map(Number);
+                const period = hours >= 12 ? 'PM' : 'AM';
+                const hours12 = hours % 12 || 12;
+                return `${hours12}:${minutes.toString().padStart(2, '0')}${period}`;
+              }
+              
               const ranges = cachedAvailability
                 .filter(s => s.DayOfWeek === weekday)
-                .map(s => `${s.StartTime.substring(0,5)}–${s.EndTime.substring(0,5)}`)
+                .map(s => `${formatTime12hr(s.StartTime.substring(0,5))} - ${formatTime12hr(s.EndTime.substring(0,5))}`)
                 .join(', ');
-              hint.textContent = ranges ? `Outside provider hours for ${weekday} (${ranges}).` : `Provider is unavailable on ${weekday}.`;
+              hint.textContent = ranges ? `❌ Outside hours for ${weekday} (${ranges})` : `Provider is unavailable on ${weekday}.`;
               hint.classList.add('error');
               hint.style.color = '#dc3545';
             }
@@ -94,10 +105,19 @@ function initializeDatePickers() {
         if (hiddenInput) hiddenInput.value = isoVal;
         if (hint) {
           const weekday = date.toLocaleDateString('en-US', { weekday: 'long' });
+          
+          // Helper function for 12hr format
+          function formatTime12hr(time24) {
+            const [hours, minutes] = time24.split(':').map(Number);
+            const period = hours >= 12 ? 'PM' : 'AM';
+            const hours12 = hours % 12 || 12;
+            return `${hours12}:${minutes.toString().padStart(2, '0')}${period}`;
+          }
+          
           const ranges = cachedAvailability && Array.isArray(cachedAvailability)
-            ? cachedAvailability.filter(s => s.DayOfWeek === weekday).map(s => `${s.StartTime.substring(0,5)}–${s.EndTime.substring(0,5)}`).join(', ')
+            ? cachedAvailability.filter(s => s.DayOfWeek === weekday).map(s => `${formatTime12hr(s.StartTime.substring(0,5))} - ${formatTime12hr(s.EndTime.substring(0,5))}`).join(', ')
             : '';
-          hint.textContent = ranges ? `Available on ${weekday}: ${ranges}` : '';
+          hint.textContent = ranges ? `✅ Available on ${weekday}: ${ranges}` : '';
           hint.classList.remove('error');
           hint.style.color = '#198754';
         }
@@ -128,17 +148,46 @@ function initializeDatePickers() {
               }
             }]);
 
-            // Render availability summary and pills
+           // Render availability summary and pills
             const order = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
+            
+            // Helper function to convert 24hr to 12hr format
+            function formatTime12hr(time24) {
+              if (!time24) return '';
+              const [hours, minutes] = time24.split(':').map(Number);
+              const period = hours >= 12 ? 'PM' : 'AM';
+              const hours12 = hours % 12 || 12;
+              return `${hours12}:${minutes.toString().padStart(2, '0')}${period}`;
+            }
+            
             if (hint) {
               const byDay = order.map(day => ({ day, slots: cachedAvailability.filter(s => s.DayOfWeek === day) }));
               const working = byDay.filter(d => d.slots.length > 0);
-              const off = byDay.filter(d => d.slots.length === 0).map(d => d.day);
-              const ranges = working.map(d => `${d.day.substring(0,3)}: ${d.slots.map(s => s.StartTime.substring(0,5)+"–"+s.EndTime.substring(0,5)).join(' | ')}`).join('  •  ');
-              hint.textContent = ranges ? `Availability • ${ranges}${off.length ? `  •  Off: ${off.join(', ')}` : ''}` : 'Availability not provided';
+              
+              if (working.length > 0) {
+                // Create clean, organized availability display
+                hint.innerHTML = '<div class="availability-display">' +
+                  '<div class="availability-header">📅 Available Hours</div>' +
+                  '<div class="availability-grid">' +
+                  working.map(d => {
+                    const dayShort = d.day.substring(0, 3);
+                    const timeSlots = d.slots.map(s => 
+                      `${formatTime12hr(s.StartTime.substring(0,5))} - ${formatTime12hr(s.EndTime.substring(0,5))}`
+                    ).join('<br>');
+                    return `<div class="availability-day-slot">
+                      <span class="day-name">${dayShort}</span>
+                      <span class="time-slots">${timeSlots}</span>
+                    </div>`;
+                  }).join('') +
+                  '</div>' +
+                  '</div>';
+              } else {
+                hint.textContent = 'Availability not provided';
+              }
               hint.style.color = '#6c757d';
               hint.classList.remove('error');
             }
+            
             if (pills) {
               pills.innerHTML = order
                 .map(d => `<span class="pill ${availableDays.has(d) ? 'on' : 'off'}">${d.substring(0,3)}</span>`)
@@ -225,9 +274,17 @@ function initializeDatePickers() {
             }
             // find weekday ranges for message
             const dtWeekday = new Date(yy, mm - 1, dd).toLocaleDateString('en-US', { weekday: 'long' });
+            // Helper function for 12hr format
+            function formatTime12hr(time24) {
+              const [hours, minutes] = time24.split(':').map(Number);
+              const period = hours >= 12 ? 'PM' : 'AM';
+              const hours12 = hours % 12 || 12;
+              return `${hours12}:${minutes.toString().padStart(2, '0')}${period}`;
+            }
+            
             const ranges = cachedAvailability
               .filter(s => s.DayOfWeek === dtWeekday)
-              .map(s => `${s.StartTime.substring(0,5)}–${s.EndTime.substring(0,5)}`)
+              .map(s => `${formatTime12hr(s.StartTime.substring(0,5))} - ${formatTime12hr(s.EndTime.substring(0,5))}`)
               .join(', ');
             hintLocal.textContent = ranges ? `Outside provider hours for ${dtWeekday} (${ranges}).` : `Provider is unavailable on ${dtWeekday}.`;
             hintLocal.classList.add('error');
@@ -242,6 +299,197 @@ function initializeDatePickers() {
   });
 }
 
+// ============================================
+// GLOBAL FUNCTIONS (Must be outside DOMContentLoaded for onclick handlers)
+// ============================================
+
+// === SECTION NAVIGATION ===
+function showSection(sectionId) {
+  // ⚠️ NORMALIZE SECTION ID (handle both "browse" and "browseSection")
+  let normalizedId = sectionId;
+  if (!sectionId.endsWith('Section')) {
+    normalizedId = sectionId + 'Section';
+  }
+  
+  const section = document.getElementById(normalizedId);
+  if (!section) {
+      console.warn(`Section ${normalizedId} not found`);
+      return;
+  }
+
+  // Hide all sections
+  document.querySelectorAll("main section").forEach(sec => {
+      sec.classList.remove("active");
+  });
+
+  // Show target
+  section.classList.add("active");
+
+  // Highlight nav
+  document.querySelectorAll(".nav-links a").forEach(a => a.classList.remove("active"));
+  const linkMap = {
+      "dashboardSection": "dashboardLink",
+      "browseSection": "browseLink",
+      "requestSection": "requestsLink"
+  };
+  const linkId = linkMap[normalizedId];
+  if (linkId) {
+      const link = document.getElementById(linkId);
+      if (link) link.classList.add("active");
+  }
+
+  // Save active section
+  sessionStorage.setItem("activeSection", normalizedId);
+
+  // Default to Active tab in Requests
+  if (normalizedId === "requestSection") {
+      document.querySelectorAll(".tab-btn").forEach(b => b.classList.remove("active"));
+      document.querySelectorAll(".request-section").forEach(sec => sec.classList.remove("active"));
+      const activeTab = document.querySelector('.tab-btn[data-tab="active"]');
+      const activeSection = document.getElementById("requestSection-active");
+      if (activeTab) activeTab.classList.add("active");
+      if (activeSection) activeSection.classList.add("active");
+  }
+
+  // Re-init date pickers when switching sections
+  if (normalizedId === "browseSection") {
+    setTimeout(() => initializeDatePickers(), 300);
+  }
+
+  // Smooth scroll
+  setTimeout(() => {
+      const h2Element = section.querySelector("h2");
+      if (!h2Element) return;
+      const navbarHeight = document.querySelector(".top-nav")?.offsetHeight || 80;
+      const h2Top = h2Element.getBoundingClientRect().top + window.pageYOffset;
+      window.scrollTo({
+          top: h2Top - navbarHeight - 20,
+          behavior: "smooth"
+      });
+  }, 100);
+}
+
+// === TOAST NOTIFICATIONS ===
+function showToast(message, type = "success") {
+  const container = document.querySelector(".toast-container") || createToastContainer();
+  const toast = document.createElement("div");
+  toast.className = type === "success" ? "success-message" : "error-message";
+  toast.textContent = message;
+  container.appendChild(toast);
+
+  setTimeout(() => {
+    toast.style.opacity = "0";
+    toast.style.transform = "translateX(100%)";
+    setTimeout(() => toast.remove(), 500);
+  }, 4000);
+}
+
+// ============================================
+// PROFILE DROPDOWN FUNCTIONALITY
+// ============================================
+document.addEventListener('DOMContentLoaded', () => {
+  const profileTrigger = document.getElementById('profileTrigger');
+  const profileDropdown = document.getElementById('profileDropdown');
+  
+  if (profileTrigger && profileDropdown) {
+    // Toggle dropdown
+    profileTrigger.addEventListener('click', (e) => {
+      e.stopPropagation();
+      profileTrigger.classList.toggle('active');
+      profileDropdown.classList.toggle('show');
+    });
+    
+    // Close on outside click
+    document.addEventListener('click', (e) => {
+      if (!profileTrigger.contains(e.target) && !profileDropdown.contains(e.target)) {
+        profileTrigger.classList.remove('active');
+        profileDropdown.classList.remove('show');
+      }
+    });
+    
+    // Close on ESC key
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') {
+        profileTrigger.classList.remove('active');
+        profileDropdown.classList.remove('show');
+      }
+    });
+  }
+  
+  // Edit Profile Modal
+  const editProfileBtn = document.getElementById('editProfileBtn');
+  if (editProfileBtn) {
+    editProfileBtn.addEventListener('click', (e) => {
+      e.preventDefault();
+      openEditProfileModal();
+    });
+  }
+  
+  // Change Photo Modal
+  const changePhotoBtn = document.getElementById('changePhotoBtn');
+  if (changePhotoBtn) {
+    changePhotoBtn.addEventListener('click', (e) => {
+      e.preventDefault();
+      openChangePhotoModal();
+    });
+  }
+});
+
+function openEditProfileModal() {
+  // Create modal HTML
+  const modalHTML = `
+    <div id="editProfileModal" class="modal show">
+      <div class="modal-content" style="max-width: 500px;">
+        <span class="close-btn" onclick="closeEditProfileModal()">&times;</span>
+        <h3>Edit Profile</h3>
+        <form id="editProfileForm" style="margin-top: 20px;">
+          <div style="margin-bottom: 15px;">
+            <label style="display: block; margin-bottom: 5px; font-weight: 600;">First Name</label>
+            <input type="text" name="fname" id="editFName" class="form-input" required>
+          </div>
+          <div style="margin-bottom: 15px;">
+            <label style="display: block; margin-bottom: 5px; font-weight: 600;">Last Name</label>
+            <input type="text" name="lname" id="editLName" class="form-input" required>
+          </div>
+          <div style="margin-bottom: 15px;">
+            <label style="display: block; margin-bottom: 5px; font-weight: 600;">Email</label>
+            <input type="email" name="email" id="editEmail" class="form-input" required>
+          </div>
+          <div style="display: flex; gap: 10px; justify-content: flex-end;">
+            <button type="button" class="btn-secondary" onclick="closeEditProfileModal()">Cancel</button>
+            <button type="submit" class="btn-primary">Save Changes</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  `;
+  
+  document.body.insertAdjacentHTML('beforeend', modalHTML);
+  
+  // Load current user data (you'll need to fetch this via AJAX)
+  // For now, this is a placeholder
+}
+
+function closeEditProfileModal() {
+  const modal = document.getElementById('editProfileModal');
+  if (modal) modal.remove();
+}
+
+function openChangePhotoModal() {
+  showToast('Photo upload feature coming soon!', 'info');
+}
+
+function createToastContainer() {
+  const div = document.createElement("div");
+  div.className = "toast-container";
+  div.style.position = "fixed";
+  div.style.top = "1rem";
+  div.style.right = "1rem";
+  div.style.zIndex = "2000";
+  document.body.appendChild(div);
+  return div;
+}
+
 // ==========================
 // CLIENT DASHBOARD JAVASCRIPT
 // ==========================
@@ -249,72 +497,6 @@ document.addEventListener("DOMContentLoaded", () => {
   
   // Initialize date pickers on load
   setTimeout(() => initializeDatePickers(), 500);
-
- // === SECTION NAVIGATION ===
-  function showSection(sectionId) {
-    // ⚠️ NORMALIZE SECTION ID (handle both "browse" and "browseSection")
-    let normalizedId = sectionId;
-    if (!sectionId.endsWith('Section')) {
-      normalizedId = sectionId + 'Section';
-    }
-    
-    const section = document.getElementById(normalizedId);
-    if (!section) {
-        console.warn(`Section ${normalizedId} not found`);
-        return;
-    }
-
-    // Hide all sections
-    document.querySelectorAll("main section").forEach(sec => {
-        sec.classList.remove("active");
-    });
-
-    // Show target
-    section.classList.add("active");
-
-    // Highlight nav
-    document.querySelectorAll(".nav-links a").forEach(a => a.classList.remove("active"));
-    const linkMap = {
-        "dashboardSection": "dashboardLink",
-        "browseSection": "browseLink",
-        "requestSection": "requestsLink"
-    };
-    const linkId = linkMap[normalizedId];
-    if (linkId) {
-        const link = document.getElementById(linkId);
-        if (link) link.classList.add("active");
-    }
-
-    // Save active section
-    sessionStorage.setItem("activeSection", normalizedId);
-
-    // Default to Active tab in Requests
-    if (normalizedId === "requestSection") {
-        document.querySelectorAll(".tab-btn").forEach(b => b.classList.remove("active"));
-        document.querySelectorAll(".request-section").forEach(sec => sec.classList.remove("active"));
-        const activeTab = document.querySelector('.tab-btn[data-tab="active"]');
-        const activeSection = document.getElementById("requestSection-active");
-        if (activeTab) activeTab.classList.add("active");
-        if (activeSection) activeSection.classList.add("active");
-    }
-
-    // Re-init date pickers when switching sections
-    if (normalizedId === "browseSection") {
-      setTimeout(() => initializeDatePickers(), 300);
-    }
-
-    // Smooth scroll
-    setTimeout(() => {
-        const h2Element = section.querySelector("h2");
-        if (!h2Element) return;
-        const navbarHeight = document.querySelector(".top-nav")?.offsetHeight || 80;
-        const h2Top = h2Element.getBoundingClientRect().top + window.pageYOffset;
-        window.scrollTo({
-            top: h2Top - navbarHeight - 20,
-            behavior: "smooth"
-        });
-    }, 100);
-  }
 
   // === NAV LINKS ===
   const dashboardLink = document.getElementById("dashboardLink");
@@ -360,6 +542,7 @@ document.addEventListener("DOMContentLoaded", () => {
     el.classList.add("show");
     document.body.style.overflow = "hidden";
   }
+ 
   function closeModal(id) {
     const el = document.getElementById(id);
     if (!el) return;
@@ -408,31 +591,7 @@ document.addEventListener("DOMContentLoaded", () => {
     });
   });
 
-  // === TOAST NOTIFICATIONS ===
-  function showToast(message, type = "success") {
-    const container = document.querySelector(".toast-container") || createToastContainer();
-    const toast = document.createElement("div");
-    toast.className = type === "success" ? "success-message" : "error-message";
-    toast.textContent = message;
-    container.appendChild(toast);
-
-    setTimeout(() => {
-      toast.style.opacity = "0";
-      toast.style.transform = "translateX(100%)";
-      setTimeout(() => toast.remove(), 500);
-    }, 2500);
-  }
-
-  function createToastContainer() {
-    const div = document.createElement("div");
-    div.className = "toast-container";
-    div.style.position = "fixed";
-    div.style.top = "1rem";
-    div.style.right = "1rem";
-    div.style.zIndex = "2000";
-    document.body.appendChild(div);
-    return div;
-  }
+ 
 
  // === BOOKING ANIMATION + AJAX ===
   document.querySelectorAll(".book-form").forEach(form => {
@@ -545,71 +704,71 @@ document.addEventListener("DOMContentLoaded", () => {
   });
     // === BOOK AGAIN FUNCTIONALITY ===
   
-  document.querySelectorAll(".book-again-btn").forEach(btn => {
-    btn.addEventListener("click", function() {
-      const skillId = this.getAttribute("data-skill-id");
-      const providerName = this.getAttribute("data-provider");
-      const providerId = this.getAttribute("data-provider-id");
+ // === UNIFIED BOOK AGAIN FUNCTIONALITY ===
+  // Handles both Top Providers and Request cards using scroll-to-card approach
+  
+  document.addEventListener('click', function(e) {
+    // Check if clicked element is a book-again button
+    if (e.target.classList.contains('book-again-simple-btn') || 
+        e.target.closest('.book-again-simple-btn')) {
       
-      // Set modal title
-      const titleEl = document.getElementById('bookAgainTitle');
-      if (titleEl) titleEl.textContent = `Book ${providerName || ''} Again`;
+      const btn = e.target.classList.contains('book-again-simple-btn') 
+        ? e.target 
+        : e.target.closest('.book-again-simple-btn');
       
-      // Set hidden skill ID
-      const rebookSkillIdEl = document.getElementById('rebookSkillId');
-      if (rebookSkillIdEl) rebookSkillIdEl.value = skillId || '';
+      const skillId = parseInt(btn.getAttribute('data-skill-id'));
+      const providerName = btn.getAttribute('data-provider');
       
-      // Initialize flatpickr for rebook
-      const rebookPicker = document.getElementById('rebookDatePicker');
-      if (!rebookPicker) { openModal('bookAgainModal'); return; }
-      if (rebookPicker._flatpickr) {
-        rebookPicker._flatpickr.destroy();
+      if (!skillId) {
+        showToast('Unable to book: Service not found', 'error');
+        return;
       }
       
-      flatpickr(rebookPicker, {
-        enableTime: true,
-        dateFormat: "F j, Y at h:i K",
-        altInput: true,
-        altFormat: "F j, Y at h:i K",
-        minDate: "today",
-        time_24hr: false,
-        minuteIncrement: 15,
-        onChange: function(selectedDates, dateStr, instance) {
-          if (selectedDates[0]) {
-            const date = selectedDates[0];
-            const year = date.getFullYear();
-            const month = String(date.getMonth() + 1).padStart(2, '0');
-            const day = String(date.getDate()).padStart(2, '0');
-            const hours = String(date.getHours()).padStart(2, '0');
-            const minutes = String(date.getMinutes()).padStart(2, '0');
-            document.getElementById('rebookScheduleHidden').value = `${year}-${month}-${day}T${hours}:${minutes}`;
-          }
-        },
-        onReady: async function(selectedDates, dateStr, instance) {
-          // Fetch provider availability if providerId exists and disable days not offered
-          if (!providerId) return;
-          try {
-            const res = await fetch(`provider.php?ajax=1&action=get_availability&provider=${providerId}`);
-            const data = await res.json();
-            if (data.ok && Array.isArray(data.data) && data.data.length > 0) {
-              const availability = data.data;
-              const availableDays = new Set(availability.map(s => s.DayOfWeek));
-              instance.set('disable', [
-                function(date) {
-                  const dayName = date.toLocaleDateString('en-US', { weekday: 'long' });
-                  return !availableDays.has(dayName);
-                }
-              ]);
-            }
-          } catch (err) {
-            console.error('Failed to load availability:', err);
-          }
-        }
-      });
+      // Navigate to browse section
+      showSection('browseSection');
       
-      // Open modal
-      openModal('bookAgainModal');
-    });
+      // Wait for section to load, then scroll to and highlight the card
+      setTimeout(() => {
+        const cards = document.querySelectorAll('.provider-card');
+        let foundCard = false;
+        
+        cards.forEach(card => {
+          const bookForm = card.querySelector('form.book-form');
+          if (bookForm) {
+            const skillInput = bookForm.querySelector('input[name="book_skill_id"]');
+            if (skillInput && parseInt(skillInput.value) === skillId) {
+              foundCard = true;
+              
+              // Smooth scroll to card
+              card.scrollIntoView({ 
+                behavior: 'smooth', 
+                block: 'center' 
+              });
+              
+              // Apply green highlight
+              card.style.transition = 'all 0.4s ease';
+              card.style.border = '3px solid #28a745';
+              card.style.boxShadow = '0 0 30px rgba(40, 167, 69, 0.4)';
+              card.style.transform = 'scale(1.02)';
+              
+              // Show toast notification
+              showToast(`Found ${providerName}'s service! Ready to book.`, 'success');
+              
+              // Remove highlight after 4 seconds
+              setTimeout(() => {
+                card.style.border = '';
+                card.style.boxShadow = '';
+                card.style.transform = '';
+              }, 4000);
+            }
+          }
+        });
+        
+        if (!foundCard) {
+          showToast(`Service not found. Provider may have removed it.`, 'error');
+        }
+      }, 600);
+    }
   });
 
   // === PROGRESS BAR ANIMATION ===
@@ -797,28 +956,70 @@ window.addEventListener("load", () => {
 // ============================================
 
 function bookAgain(skillId, providerName) {
-  if (confirm(`Book ${providerName} again?`)) {
-    document.getElementById('browseLink').click();
-    
-    setTimeout(() => {
-      const cards = document.querySelectorAll('.provider-card');
-      cards.forEach(card => {
-        const bookForm = card.querySelector('form[method="POST"]');
-        if (bookForm) {
-          const skillInput = bookForm.querySelector('input[name="book_skill_id"]');
-          if (skillInput && parseInt(skillInput.value) === skillId) {
-            card.scrollIntoView({ behavior: 'smooth', block: 'center' });
-            card.style.border = '3px solid #28a745';
-            card.style.boxShadow = '0 0 30px rgba(40, 167, 69, 0.4)';
-            setTimeout(() => {
-              card.style.border = '';
-              card.style.boxShadow = '';
-            }, 3000);
-          }
-        }
-      });
-    }, 500);
+  console.log('🔍 bookAgain called with:', { skillId, providerName });
+  
+  if (!skillId) {
+    console.error('❌ No skill ID provided');
+    showToast('Unable to book: Service ID missing', 'error');
+    return;
   }
+  
+  // Navigate to browse section
+  showSection('browseSection');
+  
+  // Wait for section to load, then scroll to and highlight the card
+  setTimeout(() => {
+    const cards = document.querySelectorAll('.provider-card');
+    console.log('📦 Found provider cards:', cards.length);
+    
+    if (cards.length === 0) {
+      console.warn('⚠️ No provider cards found - services may still be loading');
+      showToast('Loading services... Please wait and try again.', 'error');
+      return;
+    }
+    
+    let foundCard = false;
+    
+    cards.forEach(card => {
+      const bookForm = card.querySelector('form.book-form');
+      if (bookForm) {
+        const skillInput = bookForm.querySelector('input[name="book_skill_id"]');
+        const currentSkillId = skillInput ? parseInt(skillInput.value) : null;
+        
+        if (currentSkillId === parseInt(skillId)) {
+          foundCard = true;
+          console.log('✅ Found matching card for skill ID:', skillId);
+          
+          // Smooth scroll to card
+          card.scrollIntoView({ 
+            behavior: 'smooth', 
+            block: 'center' 
+          });
+          
+          // Apply green highlight with scale animation
+          card.style.transition = 'all 0.4s ease';
+          card.style.border = '3px solid #28a745';
+          card.style.boxShadow = '0 0 30px rgba(40, 167, 69, 0.4)';
+          card.style.transform = 'scale(1.02)';
+          
+          // Show toast notification
+          showToast(`Found ${providerName}'s service! Ready to book.`, 'success');
+          
+          // Remove highlight after 4 seconds
+          setTimeout(() => {
+            card.style.border = '';
+            card.style.boxShadow = '';
+            card.style.transform = '';
+          }, 4000);
+        }
+      }
+    });
+    
+    if (!foundCard) {
+      console.warn('⚠️ Card not found for skill ID:', skillId);
+      showToast(`Service not found. Provider may have removed it.`, 'error');
+    }
+  }, 800); // Increased timeout to 800ms
 }
 
 function viewProviderProfile(providerId, name, skill, rate, bookingCount) {
@@ -855,4 +1056,352 @@ function viewProviderProfile(providerId, name, skill, rate, bookingCount) {
   `;
   
   openModal('contactModal');
+}
+// ============================================
+// PROFILE MODAL SYSTEM
+// ============================================
+
+function openModal(modalId) {
+  const modal = document.getElementById(modalId);
+  if (!modal) return;
+  
+  modal.classList.add('show');
+  modal.style.display = 'flex';
+  document.body.style.overflow = 'hidden';
+  
+  // Load profile data if opening profile modal
+  if (modalId === 'profileModal') {
+    loadProfileData();
+  }
+  
+  // Initialize photo preview if opening photo modal
+  if (modalId === 'photoModal') {
+    initPhotoPreview();
+  }
+}
+
+function closeModal(modalId) {
+  const modal = document.getElementById(modalId);
+  if (!modal) return;
+  
+  modal.classList.remove('show');
+  setTimeout(() => {
+    modal.style.display = 'none';
+  }, 300);
+  document.body.style.overflow = 'auto';
+}
+
+// Profile Tabs
+document.addEventListener('DOMContentLoaded', () => {
+  document.querySelectorAll('.profile-tab').forEach(tab => {
+    tab.addEventListener('click', () => {
+      // Remove active from all tabs and contents
+      document.querySelectorAll('.profile-tab').forEach(t => t.classList.remove('active'));
+      document.querySelectorAll('.profile-tab-content').forEach(c => c.classList.remove('active'));
+      
+      // Add active to clicked tab
+      tab.classList.add('active');
+      
+      // Show corresponding content
+      const tabName = tab.getAttribute('data-tab');
+      document.getElementById(`profileTab-${tabName}`).classList.add('active');
+    });
+  });
+});
+
+// ============================================
+// LOAD PROFILE DATA
+// ============================================
+async function loadProfileData() {
+  try {
+    const res = await fetch('update_profile.php?action=get_profile', { method: 'POST' });
+    const data = await res.json();
+    
+    if (data.success) {
+      const user = data.data;
+      document.getElementById('fname').value = user.FName || '';
+      document.getElementById('lname').value = user.LName || '';
+      document.getElementById('mname').value = user.MName || '';
+      document.getElementById('phone').value = user.Phone || '';
+      document.getElementById('dob').value = user.DateOfBirth || '';
+      document.getElementById('bio').value = user.Bio || '';
+      document.getElementById('location').value = user.Location || '';
+      document.getElementById('city').value = user.City || '';
+      document.getElementById('province').value = user.Province || '';
+      document.getElementById('barangay').value = user.Barangay || '';
+    } else {
+      showToast('Failed to load profile', 'error');
+    }
+  } catch (err) {
+    console.error('Error loading profile:', err);
+    showToast('Error loading profile', 'error');
+  }
+}
+
+// ============================================
+// FORM SUBMISSIONS
+// ============================================
+
+// Basic Info Form
+document.addEventListener('DOMContentLoaded', () => {
+  const basicForm = document.getElementById('basicInfoForm');
+  if (basicForm) {
+    basicForm.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      
+      const formData = new FormData(e.target);
+      formData.append('action', 'update_basic_info');
+      
+      // Validate age
+      const dob = formData.get('dob');
+      if (dob) {
+        const dobDate = new Date(dob);
+        const age = (new Date() - dobDate) / (365.25 * 24 * 60 * 60 * 1000);
+        if (age < 13) {
+          showToast('You must be at least 13 years old', 'error');
+          return;
+        }
+      }
+      
+      const btn = e.target.querySelector('.btn-primary');
+      btn.disabled = true;
+      btn.innerHTML = '<span class="spinner"></span> Saving...';
+      
+      try {
+        const res = await fetch('update_profile.php', { method: 'POST', body: formData });
+        const data = await res.json();
+        
+        if (data.success) {
+          showToast(data.message, 'success');
+          
+          // Update displayed name in header
+          const profileName = document.querySelector('.profile-name');
+          if (profileName) {
+            profileName.textContent = `Hi, ${data.data.FName}`;
+          }
+          
+          // Update dropdown header
+          const dropdownHeader = document.querySelector('.dropdown-user-info h4');
+          if (dropdownHeader) {
+            dropdownHeader.textContent = `${data.data.FName} ${data.data.LName}`;
+          }
+          
+          // Update initials if no photo
+          const initials = (data.data.FName.charAt(0) + data.data.LName.charAt(0)).toUpperCase();
+          document.querySelectorAll('.profile-avatar-initials, .dropdown-avatar-initials').forEach(el => {
+            el.textContent = initials;
+          });
+        } else {
+          showToast(data.message, 'error');
+        }
+      } catch (err) {
+        showToast('Error updating profile', 'error');
+      } finally {
+        btn.disabled = false;
+        btn.innerHTML = 'Save Changes';
+      }
+    });
+  }
+});
+
+// Address Form
+document.addEventListener('DOMContentLoaded', () => {
+  const addressForm = document.getElementById('addressForm');
+  if (addressForm) {
+    addressForm.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      
+      const formData = new FormData(e.target);
+      formData.append('action', 'update_address');
+      
+      const btn = e.target.querySelector('.btn-primary');
+      btn.disabled = true;
+      btn.innerHTML = '<span class="spinner"></span> Saving...';
+      
+      try {
+        const res = await fetch('update_profile.php', { method: 'POST', body: formData });
+        const data = await res.json();
+        showToast(data.message, data.success ? 'success' : 'error');
+      } catch (err) {
+        showToast('Error updating address', 'error');
+      } finally {
+        btn.disabled = false;
+        btn.innerHTML = 'Save Changes';
+      }
+    });
+  }
+});
+
+// Password Form
+document.addEventListener('DOMContentLoaded', () => {
+  const passwordForm = document.getElementById('passwordForm');
+  if (passwordForm) {
+    passwordForm.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      
+      const formData = new FormData(e.target);
+      formData.append('action', 'change_password');
+      
+      // Validate passwords match
+      if (formData.get('new_password') !== formData.get('confirm_password')) {
+        showToast('Passwords do not match', 'error');
+        return;
+      }
+      
+      // Validate length
+      if (formData.get('new_password').length < 6) {
+        showToast('Password must be at least 6 characters', 'error');
+        return;
+      }
+      
+      const btn = e.target.querySelector('.btn-primary');
+      btn.disabled = true;
+      btn.innerHTML = '<span class="spinner"></span> Changing...';
+      
+      try {
+        const res = await fetch('update_profile.php', { method: 'POST', body: formData });
+        const data = await res.json();
+        
+        showToast(data.message, data.success ? 'success' : 'error');
+        
+        if (data.success) {
+          e.target.reset();
+        }
+      } catch (err) {
+        showToast('Error changing password', 'error');
+      } finally {
+        btn.disabled = false;
+        btn.innerHTML = 'Change Password';
+      }
+    });
+  }
+});
+
+// ============================================
+// PHOTO UPLOAD FUNCTIONALITY
+// ============================================
+function initPhotoPreview() {
+  const preview = document.getElementById('photoPreview');
+  const input = document.getElementById('photoInput');
+  const uploadBtn = document.getElementById('uploadPhotoBtn');
+  const removeBtn = document.getElementById('removePhotoBtn');
+  
+  // Click to upload
+  preview.addEventListener('click', () => input.click());
+  
+  // Drag & drop
+  preview.addEventListener('dragover', (e) => {
+    e.preventDefault();
+    preview.style.borderColor = '#667eea';
+  });
+  
+  preview.addEventListener('dragleave', () => {
+    preview.style.borderColor = '#e9ecef';
+  });
+  
+  preview.addEventListener('drop', (e) => {
+    e.preventDefault();
+    preview.style.borderColor = '#e9ecef';
+    if (e.dataTransfer.files[0]) {
+      handlePhotoFile(e.dataTransfer.files[0]);
+    }
+  });
+  
+  // File input change
+  input.addEventListener('change', () => {
+    if (input.files[0]) {
+      handlePhotoFile(input.files[0]);
+    }
+  });
+  
+  // Handle photo file
+  function handlePhotoFile(file) {
+    const allowedTypes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
+    
+    if (!allowedTypes.includes(file.type)) {
+      showToast('Invalid file type. Use JPG, PNG, GIF, or WebP', 'error');
+      return;
+    }
+    
+    if (file.size > 5 * 1024 * 1024) {
+      showToast('File too large. Maximum 5MB', 'error');
+      return;
+    }
+    
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      preview.innerHTML = `<img src="${e.target.result}" alt="Preview" style="width:100%;height:100%;object-fit:cover;border-radius:12px;">`;
+      uploadBtn.disabled = false;
+    };
+    reader.readAsDataURL(file);
+  }
+  
+  // Upload button
+  uploadBtn.addEventListener('click', async () => {
+    if (!input.files[0]) return;
+    
+    const formData = new FormData();
+    formData.append('action', 'upload_photo');
+    formData.append('photo', input.files[0]);
+    
+    uploadBtn.disabled = true;
+    uploadBtn.innerHTML = '<span class="spinner"></span> Uploading...';
+    
+    try {
+      const res = await fetch('update_profile.php', { method: 'POST', body: formData });
+      const data = await res.json();
+      
+      if (data.success) {
+        showToast(data.message, 'success');
+        
+        // Update all profile images
+        document.querySelectorAll('.profile-avatar, .dropdown-avatar').forEach(img => {
+          img.src = data.photo_url;
+        });
+        
+        // Hide initials, show images
+        document.querySelectorAll('.profile-avatar-initials, .dropdown-avatar-initials').forEach(el => {
+          el.style.display = 'none';
+        });
+        
+        closeModal('photoModal');
+        
+        // Reload page to show new photo
+        setTimeout(() => location.reload(), 1000);
+      } else {
+        showToast(data.message, 'error');
+      }
+    } catch (err) {
+      showToast('Error uploading photo', 'error');
+    } finally {
+      uploadBtn.disabled = false;
+      uploadBtn.innerHTML = 'Upload';
+    }
+  });
+  
+  // Remove button
+  removeBtn.addEventListener('click', async () => {
+    if (!confirm('Remove your profile photo?')) return;
+    
+    removeBtn.disabled = true;
+    removeBtn.innerHTML = '<span class="spinner"></span> Removing...';
+    
+    try {
+      const res = await fetch('update_profile.php?action=remove_photo', { method: 'POST' });
+      const data = await res.json();
+      
+      if (data.success) {
+        showToast(data.message, 'success');
+        closeModal('photoModal');
+        setTimeout(() => location.reload(), 1000);
+      } else {
+        showToast(data.message, 'error');
+      }
+    } catch (err) {
+      showToast('Error removing photo', 'error');
+    } finally {
+      removeBtn.disabled = false;
+      removeBtn.innerHTML = 'Remove Photo';
+    }
+  });
 }

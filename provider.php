@@ -755,6 +755,7 @@ if ($my_requests) {
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap" rel="stylesheet">
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link rel="stylesheet" href="styles/provider.css">
 
     <style>
       /* Smooth slide up for alerts */
@@ -785,9 +786,63 @@ if ($my_requests) {
                 <a class="nav-link" href="#jobs-section" id="jobsLink">My Jobs</a>
                 <a class="nav-link" href="#skills-section" id="skillsLink">My Skills</a>
             </div>
-            <div class="d-flex">
-                <span class="navbar-text me-3">Hi, <?php echo htmlspecialchars($provider_name); ?></span>
-                <a href="logout.php" class="btn btn-danger">Logout</a>
+           <?php
+            // Fetch full user data for profile dropdown
+            $user_query = "SELECT FName, LName, Email, ProfilePhoto FROM users WHERE ID = ?";
+            $user_stmt = $conn->prepare($user_query);
+            $user_stmt->bind_param("i", $provider_id);
+            $user_stmt->execute();
+            $user_data = $user_stmt->get_result()->fetch_assoc();
+
+            $user_initials = strtoupper(substr($user_data['FName'], 0, 1) . substr($user_data['LName'], 0, 1));
+            $profile_photo = $user_data['ProfilePhoto'] ?? null;
+            ?>
+
+            <div class="profile-dropdown-container">
+                <button class="profile-trigger" id="profileTrigger">
+                    <?php if ($profile_photo && file_exists($profile_photo)): ?>
+                        <img src="<?= htmlspecialchars($profile_photo) ?>" alt="Profile" class="profile-avatar">
+                    <?php else: ?>
+                        <div class="profile-avatar-initials"><?= $user_initials ?></div>
+                    <?php endif; ?>
+                    <span class="profile-name">Hi, <?= htmlspecialchars($user_data['FName']) ?></span>
+                    <svg class="dropdown-arrow" width="12" height="12" viewBox="0 0 12 12" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        <path d="M2 4L6 8L10 4" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                    </svg>
+                </button>
+                
+                <div class="profile-dropdown-menu" id="profileDropdown">
+                    <div class="dropdown-header">
+                        <?php if ($profile_photo && file_exists($profile_photo)): ?>
+                            <img src="<?= htmlspecialchars($profile_photo) ?>" alt="Profile" class="dropdown-avatar">
+                        <?php else: ?>
+                            <div class="dropdown-avatar-initials"><?= $user_initials ?></div>
+                        <?php endif; ?>
+                        <div class="dropdown-user-info">
+                            <h4><?= htmlspecialchars($user_data['FName'] . ' ' . $user_data['LName']) ?></h4>
+                            <p><?= htmlspecialchars($user_data['Email']) ?></p>
+                        </div>
+                    </div>
+                    
+                    <div class="dropdown-divider"></div>
+                    
+                    <a href="#" class="dropdown-item" onclick="openModal('profileModal'); return false;">
+                        <span>👤</span>
+                        Edit Profile
+                    </a>
+                    
+                    <a href="#" class="dropdown-item" onclick="openModal('photoModal'); return false;">
+                        <span>📷</span>
+                        Change Photo
+                    </a>
+                    
+                    <div class="dropdown-divider"></div>
+                    
+                    <a href="logout.php" class="dropdown-item logout-item">
+                        <span>🚪</span>
+                        Logout
+                    </a>
+                </div>
             </div>
         </div>
     </header>
@@ -1151,7 +1206,7 @@ if ($my_requests) {
                 <div class="col-md-4">
                     <label for="searchSkill" class="form-label mb-1">Search Skill</label>
                     <input type="text" name="search" id="searchSkill" class="form-control"
-                        placeholder="Search by name or description"
+                        placeholder="Search by skillName or Description"
                         value="<?php echo htmlspecialchars($_GET['search'] ?? ''); ?>">
                 </div>
 
@@ -1639,12 +1694,149 @@ if ($my_requests) {
                     <?php endif; ?>
                 </div>
 
+                                <!-- Profile Edit Modal -->
+                <div id="profileModal" class="modal profile-modal" role="dialog" aria-hidden="true">
+                    <div class="modal-content">
+                        <span class="close-btn" onclick="closeModal('profileModal')">&times;</span>
+                        
+                        <div class="modal-header-custom">
+                            <h2>✏️ Edit Profile</h2>
+                            <p>Update your personal information</p>
+                        </div>
+                        
+                        <div class="profile-tabs">
+                            <button class="profile-tab active" data-tab="basic">Basic Info</button>
+                            <button class="profile-tab" data-tab="address">Address</button>
+                            <button class="profile-tab" data-tab="security">Security</button>
+                        </div>
+                        
+                        <div class="profile-tab-content active" id="profileTab-basic">
+                            <form id="basicInfoForm" class="profile-form">
+                                <div class="form-row">
+                                    <div class="form-group">
+                                        <label for="fname">First Name</label>
+                                        <input type="text" id="fname" name="fname" required>
+                                    </div>
+                                    <div class="form-group">
+                                        <label for="lname">Last Name</label>
+                                        <input type="text" id="lname" name="lname" required>
+                                    </div>
+                                </div>
+                                <div class="form-row">
+                                    <div class="form-group">
+                                        <label for="mname">Middle Name (Optional)</label>
+                                        <input type="text" id="mname" name="mname">
+                                    </div>
+                                    <div class="form-group">
+                                        <label for="phone">Phone</label>
+                                        <input type="tel" id="phone" name="phone">
+                                    </div>
+                                </div>
+                                <div class="form-row">
+                                    <div class="form-group">
+                                        <label for="dob">Date of Birth</label>
+                                        <input type="date" id="dob" name="dob">
+                                    </div>
+                                </div>
+                                <div class="form-group">
+                                    <label for="bio">Bio</label>
+                                    <textarea id="bio" name="bio" rows="3"></textarea>
+                                </div>
+                                <div class="form-actions">
+                                    <button type="button" class="btn-secondary" onclick="closeModal('profileModal')">Cancel</button>
+                                    <button type="submit" class="btn-primary">Save Changes</button>
+                                </div>
+                            </form>
+                        </div>
+                        
+                        <div class="profile-tab-content" id="profileTab-address">
+                            <form id="addressForm" class="profile-form">
+                                <div class="form-group">
+                                    <label for="location">Street Address</label>
+                                    <input type="text" id="location" name="location">
+                                </div>
+                                <div class="form-row">
+                                    <div class="form-group">
+                                        <label for="barangay">Barangay</label>
+                                        <input type="text" id="barangay" name="barangay">
+                                    </div>
+                                    <div class="form-group">
+                                        <label for="city">City</label>
+                                        <input type="text" id="city" name="city">
+                                    </div>
+                                </div>
+                                <div class="form-group">
+                                    <label for="province">Province</label>
+                                    <input type="text" id="province" name="province">
+                                </div>
+                                <div class="form-actions">
+                                    <button type="button" class="btn-secondary" onclick="closeModal('profileModal')">Cancel</button>
+                                    <button type="submit" class="btn-primary">Save Changes</button>
+                                </div>
+                            </form>
+                        </div>
+                        
+                        <div class="profile-tab-content" id="profileTab-security">
+                            <div class="security-notice">
+                                <span style="font-size: 20px;">🔒</span>
+                                <p>For security, you'll need to verify your current password to make changes.</p>
+                            </div>
+                            <form id="passwordForm" class="profile-form">
+                                <div class="form-group">
+                                    <label for="current_password">Current Password</label>
+                                    <input type="password" id="current_password" name="current_password" required minlength="6">
+                                </div>
+                                <div class="form-group">
+                                    <label for="new_password">New Password</label>
+                                    <input type="password" id="new_password" name="new_password" required minlength="6">
+                                </div>
+                                <div class="form-group">
+                                    <label for="confirm_password">Confirm New Password</label>
+                                    <input type="password" id="confirm_password" name="confirm_password" required minlength="6">
+                                </div>
+                                <div class="form-actions">
+                                    <button type="button" class="btn-secondary" onclick="closeModal('profileModal')">Cancel</button>
+                                    <button type="submit" class="btn-primary">Change Password</button>
+                                </div>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Photo Upload Modal -->
+               <div id="photoModal" class="modal photo-modal" role="dialog" aria-hidden="true">
+                <div class="modal-content photo-modal-content">
+                    <span class="close-btn" onclick="closeModal('photoModal')">&times;</span>
+                    
+                    <div class="modal-header-custom">
+                        <h2>📷 Change Profile Photo</h2>
+                        <p>Upload a new photo or remove current one</p>
+                    </div>
+                    
+                    <div class="photo-upload-area">
+                        <div class="photo-preview" id="photoPreview">
+                            <span style="font-size: 48px;">📸</span>
+                            <p>Click or drag photo here</p>
+                            <small>JPG, PNG, GIF, WebP • Max 5MB</small>
+                        </div>
+                        <input type="file" id="photoInput" accept="image/jpeg,image/png,image/gif,image/webp" style="display:none;">
+                        
+                        <div class="form-actions" style="margin-top:20px;">
+                            <button type="button" class="btn-danger" id="removePhotoBtn">Remove Photo</button>
+                            <button type="button" class="btn-secondary" onclick="closeModal('photoModal')">Cancel</button>
+                            <button type="button" class="btn-primary" id="uploadPhotoBtn" disabled>Upload</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
     </main>
 
     <!-- Bootstrap JS and Custom JS -->
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <script src="js/provider.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    
 
     <script>
     // Tabs functionality (keeps original behavior)

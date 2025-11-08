@@ -10,15 +10,16 @@ document.addEventListener('DOMContentLoaded', () => {
     const cleanUrl = window.location.pathname + "#skills-section";
     window.history.replaceState({}, '', cleanUrl);
     localStorage.setItem('activeSection', 'skills-section');
-}
-// Handle job status updates
-if (window.location.search.includes('job_updated=1')) {
+  }
+  
+  // Handle job status updates
+  if (window.location.search.includes('job_updated=1')) {
     // Clean URL and set hash in one operation
     const hash = window.location.hash || '#jobs-section';
     const cleanUrl = window.location.pathname + hash;
     window.history.replaceState({}, '', cleanUrl);
     localStorage.setItem('activeSection', 'jobs-section');
-}
+  }
 
   console.log('provider.js loaded ✅');
 
@@ -375,11 +376,6 @@ if (window.location.search.includes('job_updated=1')) {
     return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}`;
   }
 
-  // --- Setup 12-hour time inputs (dropdowns are pre-populated in HTML) ---
-  function setup12HourInputs() {
-    console.log('✅ Time dropdowns ready');
-  }
-
   const form = document.getElementById('availabilityForm');
   const list = document.getElementById('availabilityList');
 
@@ -478,7 +474,6 @@ if (window.location.search.includes('job_updated=1')) {
     form.addEventListener('submit', async e => {
       e.preventDefault();
 
-      // Get values from separate dropdowns
       const startHour = form.querySelector('#availStartHour').value;
       const startMin = form.querySelector('#availStartMin').value;
       const startPeriod = form.querySelector('#startPeriod').value;
@@ -489,17 +484,14 @@ if (window.location.search.includes('job_updated=1')) {
 
       const checked = [...form.querySelectorAll('input[name="days[]"]:checked')].map(c => c.value);
 
-      // Validate all fields are selected
       if (!startHour || !startMin || !endHour || !endMin) {
         alert('Please select all time fields (hour and minute).');
         return;
       }
 
-      // Combine hour and minute
       const start12 = `${startHour}:${startMin}`;
       const end12 = `${endHour}:${endMin}`;
 
-      // Convert to 24-hour format for validation and submission
       const start24 = convertTo24Hour(start12, startPeriod);
       const end24 = convertTo24Hour(end12, endPeriod);
 
@@ -533,13 +525,11 @@ if (window.location.search.includes('job_updated=1')) {
         }
       }
 
-      // Show all errors at once
       if (errorMessages.length > 0) {
         alert(errorMessages.join('\n'));
       }
 
       if (addedAny) {
-        // Reset form to defaults
         form.querySelector('#availStartHour').value = '08';
         form.querySelector('#availStartMin').value = '00';
         form.querySelector('#startPeriod').value = 'AM';
@@ -560,9 +550,7 @@ if (window.location.search.includes('job_updated=1')) {
     console.log('Loading charts...');
 
     const timeRes = await fetchJSON(`${base}&action=requests_over_time`);
-    console.log('Requests Over Time response:', timeRes);
     const timeCtx = document.getElementById('requestsOverTimeChart')?.getContext('2d');
-    console.log('Time context:', timeCtx);
 
     if (timeCtx && timeRes.ok && timeRes.data) {
       const labels = timeRes.data.map(item => item.month || 'Unknown');
@@ -598,15 +586,9 @@ if (window.location.search.includes('job_updated=1')) {
           }
         }
       });
-    } else {
-      console.error('Failed to load Requests Over Time chart:', timeRes);
-      if (timeCtx) {
-        timeCtx.canvas.parentElement.innerHTML += '<div class="text-danger text-center mt-2">Failed to load chart data.</div>';
-      }
     }
 
     const statusRes = await fetchJSON(`${base}&action=status_summary`);
-    console.log('Status Summary response:', statusRes);
     const statusCtx = document.getElementById('statusSummaryChart')?.getContext('2d');
 
     if (statusCtx && statusRes.ok && statusRes.data) {
@@ -637,20 +619,11 @@ if (window.location.search.includes('job_updated=1')) {
           }
         }
       });
-    } else {
-      console.error('Failed to load Status Summary chart:', statusRes);
-      if (statusCtx) {
-        statusCtx.canvas.parentElement.innerHTML += '<div class="text-danger text-center mt-2">Failed to load chart data.</div>';
-      }
     }
    
-    // ======================================================
-    //     LOAD TOP 3 MOST BOOKED SKILLS WIDGET
-    // ======================================================
     const topSkillsContainer = document.getElementById('topSkillsContainer');
     if (topSkillsContainer) {
       const topRes = await fetchJSON(`${base}&action=top_skills`);
-      console.log('Top Skills:', topRes);
 
       if (topRes.ok && topRes.data.length > 0) {
         const listHTML = topRes.data.map(
@@ -671,31 +644,25 @@ if (window.location.search.includes('job_updated=1')) {
   }
 
   // ======================================================
-  //            SEARCH & FILTER LOGIC (GLOBAL)
+  //            SEARCH & FILTER LOGIC
   // ======================================================
   const skillsFilterForm = document.getElementById('skillsFilterForm');
   const skillsSearchInput = document.getElementById('searchSkill');
   const filterCategorySelect = document.getElementById('filterCategory');
   const clearFiltersBtn = document.getElementById('clearFilters');
 
-  // Clear search text whenever a category is chosen
   if (filterCategorySelect && skillsSearchInput) {
     filterCategorySelect.addEventListener('change', () => {
       skillsSearchInput.value = '';
     });
   }
 
-  // Clear button: reset form fields AND reload cleanly
   if (clearFiltersBtn) {
     clearFiltersBtn.addEventListener('click', (e) => {
       e.preventDefault();
-      console.log('[Clear] clicked');
-
       if (skillsFilterForm) skillsFilterForm.reset();
       if (skillsSearchInput) skillsSearchInput.value = '';
       if (filterCategorySelect) filterCategorySelect.value = '';
-
-      // Force clean PHP reload
       window.location.href = window.location.pathname;
     });
   }
@@ -704,32 +671,419 @@ if (window.location.search.includes('job_updated=1')) {
     new bootstrap.Toast(toastEl, { delay: 4000 }).show();
   });
 
-  // ===================
-  // TOAST HANDLER
-  // ===================
-  function showToast(message, type = 'success') {
-    const toastArea = document.getElementById('toast-area');
-    if (!toastArea) return;
-
-    const toast = document.createElement('div');
-    toast.className = `toast align-items-center text-bg-${type} border-0 show mb-2`;
-    toast.role = "alert";
-    toast.innerHTML = `
-      <div class="d-flex">
-        <div class="toast-body">${message}</div>
-        <button type="button" class="btn-close btn-close-white me-2 m-auto" 
-            data-bs-dismiss="toast"></button>
-      </div>
-    `;
-
-    toastArea.appendChild(toast);
-
-    const bsToast = new bootstrap.Toast(toast, { delay: 4000 });
-    bsToast.show();
-  }
-
   // Automatically show messages passed from PHP
   if (window.success_message) showToast(window.success_message, 'success');
   if (window.error_message) showToast(window.error_message, 'danger');
 
-});
+  // ============================================
+  // PROFILE DROPDOWN FUNCTIONALITY
+  // ============================================
+  const profileTrigger = document.getElementById('profileTrigger');
+  const profileDropdown = document.getElementById('profileDropdown');
+
+  if (profileTrigger && profileDropdown) {
+    profileTrigger.addEventListener('click', (e) => {
+      e.stopPropagation();
+      profileTrigger.classList.toggle('active');
+      profileDropdown.classList.toggle('show');
+    });
+    
+    document.addEventListener('click', (e) => {
+      if (!profileTrigger.contains(e.target) && !profileDropdown.contains(e.target)) {
+        profileTrigger.classList.remove('active');
+        profileDropdown.classList.remove('show');
+      }
+    });
+    
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') {
+        profileTrigger.classList.remove('active');
+        profileDropdown.classList.remove('show');
+      }
+    });
+  }
+
+// ============================================
+  // PROFILE TAB SWITCHING (INSIDE EXISTING DOMContentLoaded)
+  // ============================================
+  document.querySelectorAll('.profile-tab').forEach(tab => {
+    tab.addEventListener('click', function() {
+      document.querySelectorAll('.profile-tab').forEach(t => t.classList.remove('active'));
+      document.querySelectorAll('.profile-tab-content').forEach(c => c.classList.remove('active'));
+      
+      this.classList.add('active');
+      const tabName = this.getAttribute('data-tab');
+      const target = document.getElementById(`profileTab-${tabName}`);
+      if (target) target.classList.add('active');
+    });
+  });
+  
+  // ============================================
+  // BASIC INFO FORM SUBMISSION
+  // ============================================
+  const basicForm = document.getElementById('basicInfoForm');
+  if (basicForm) {
+    basicForm.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      
+      const formData = new FormData(e.target);
+      formData.append('action', 'update_basic_info');
+      
+      const dob = formData.get('dob');
+      if (dob) {
+        const dobDate = new Date(dob);
+        const age = (new Date() - dobDate) / (365.25 * 24 * 60 * 60 * 1000);
+        if (age < 13) {
+          showToast('You must be at least 13 years old', 'danger');
+          return;
+        }
+      }
+      
+      const btn = e.target.querySelector('.btn-primary');
+      const originalText = btn.innerHTML;
+      btn.disabled = true;
+      btn.innerHTML = '⏳ Saving...';
+      
+      try {
+        const res = await fetch('update_profile_provider.php', { method: 'POST', body: formData });
+        const data = await res.json();
+        
+        if (data.success) {
+          showToast(data.message, 'success');
+          
+          const profileName = document.querySelector('.profile-name');
+          if (profileName) {
+            profileName.textContent = `Hi, ${data.data.FName}`;
+          }
+          
+          const dropdownHeader = document.querySelector('.dropdown-user-info h4');
+          if (dropdownHeader) {
+            dropdownHeader.textContent = `${data.data.FName} ${data.data.LName}`;
+          }
+          
+          const initials = (data.data.FName.charAt(0) + data.data.LName.charAt(0)).toUpperCase();
+          document.querySelectorAll('.profile-avatar-initials, .dropdown-avatar-initials').forEach(el => {
+            el.textContent = initials;
+          });
+        } else {
+          showToast(data.message, 'danger');
+        }
+      } catch (err) {
+        console.error('Error:', err);
+        showToast('Error updating profile', 'danger');
+      } finally {
+        btn.disabled = false;
+        btn.innerHTML = originalText;
+      }
+    });
+  }
+
+  // ============================================
+  // ADDRESS FORM SUBMISSION
+  // ============================================
+  const addressForm = document.getElementById('addressForm');
+  if (addressForm) {
+    addressForm.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      
+      const formData = new FormData(e.target);
+      formData.append('action', 'update_address');
+      
+      const btn = e.target.querySelector('.btn-primary');
+      const originalText = btn.innerHTML;
+      btn.disabled = true;
+      btn.innerHTML = '⏳ Saving...';
+      
+      try {
+        const res = await fetch('update_profile_provider.php', { method: 'POST', body: formData });
+        const data = await res.json();
+        showToast(data.message, data.success ? 'success' : 'danger');
+      } catch (err) {
+        console.error('Error:', err);
+        showToast('Error updating address', 'danger');
+      } finally {
+        btn.disabled = false;
+        btn.innerHTML = originalText;
+      }
+    });
+  }
+
+  // ============================================
+  // PASSWORD FORM SUBMISSION
+  // ============================================
+  const passwordForm = document.getElementById('passwordForm');
+  if (passwordForm) {
+    passwordForm.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      
+      const formData = new FormData(e.target);
+      
+      if (formData.get('new_password') !== formData.get('confirm_password')) {
+        showToast('Passwords do not match', 'danger');
+        return;
+      }
+      
+      if (formData.get('new_password').length < 6) {
+        showToast('Password must be at least 6 characters', 'danger');
+        return;
+      }
+      
+      formData.append('action', 'change_password');
+      
+      const btn = e.target.querySelector('.btn-primary');
+      const originalText = btn.innerHTML;
+      btn.disabled = true;
+      btn.innerHTML = '⏳ Changing...';
+      
+      try {
+        const res = await fetch('update_profile_provider.php', { method: 'POST', body: formData });
+        const data = await res.json();
+        
+        showToast(data.message, data.success ? 'success' : 'danger');
+        
+        if (data.success) {
+          e.target.reset();
+        }
+      } catch (err) {
+        console.error('Error:', err);
+        showToast('Error changing password', 'danger');
+      } finally {
+        btn.disabled = false;
+        btn.innerHTML = originalText;
+      }
+    });
+  }
+
+}); // ← END OF DOMContentLoaded
+
+
+// ============================================
+// GLOBAL HELPER FUNCTIONS (OUTSIDE DOMContentLoaded)
+// ============================================
+
+function showToast(message, type = 'success') {
+  const toastArea = document.getElementById('toast-area');
+  if (!toastArea) {
+    console.log('📢 Toast:', message);
+    return;
+  }
+
+  const toast = document.createElement('div');
+  toast.className = `toast align-items-center text-bg-${type} border-0 show mb-2`;
+  toast.role = "alert";
+  toast.innerHTML = `
+    <div class="d-flex">
+      <div class="toast-body">${message}</div>
+      <button type="button" class="btn-close btn-close-white me-2 m-auto" 
+          data-bs-dismiss="toast"></button>
+    </div>
+  `;
+
+  toastArea.appendChild(toast);
+  const bsToast = new bootstrap.Toast(toast, { delay: 4000 });
+  bsToast.show();
+}
+
+// ============================================
+// MODAL FUNCTIONS - GLOBAL SCOPE
+// ============================================
+window.openModal = function(modalId) {
+  console.log('🔓 Opening modal:', modalId);
+  const modal = document.getElementById(modalId);
+  
+  if (!modal) {
+    console.error('❌ Modal not found:', modalId);
+    return;
+  }
+  
+  modal.style.display = 'flex';
+  modal.offsetHeight;
+  
+  requestAnimationFrame(() => {
+    modal.classList.add('show');
+    document.body.style.overflow = 'hidden';
+    
+    // Load data AFTER modal is visible
+    if (modalId === 'profileModal') {
+      console.log('📝 Loading profile...');
+      setTimeout(() => loadProfileData(), 100);
+    }
+    
+    if (modalId === 'photoModal') {
+      console.log('📷 Initializing photo...');
+      setTimeout(() => initPhotoPreview(), 100);
+    }
+  });
+};
+
+window.closeModal = function(modalId) {
+  console.log('🔒 Closing modal:', modalId);
+  const modal = document.getElementById(modalId);
+  if (!modal) return;
+  
+  modal.classList.remove('show');
+  setTimeout(() => {
+    modal.style.display = 'none';
+    document.body.style.overflow = 'auto';
+  }, 300);
+};
+
+// ============================================
+// PROFILE DATA LOADING
+// ============================================
+async function loadProfileData() {
+  try {
+    console.log('🔄 Fetching profile data...');
+    const res = await fetch('update_profile_provider.php?action=get_profile', { method: 'POST' });
+    const data = await res.json();
+    
+    console.log('📦 Profile data:', data);
+    
+    if (data.success) {
+      const user = data.data;
+      const fields = {
+        fname: user.FName,
+        lname: user.LName,
+        mname: user.MName,
+        phone: user.Phone,
+        dob: user.DateOfBirth,
+        bio: user.Bio,
+        location: user.Location,
+        city: user.City,
+        province: user.Province,
+        barangay: user.Barangay
+      };
+      
+      Object.entries(fields).forEach(([id, value]) => {
+        const el = document.getElementById(id);
+        if (el) el.value = value || '';
+      });
+      
+      console.log('✅ Profile data loaded');
+    } else {
+      showToast('Failed to load profile', 'danger');
+    }
+  } catch (err) {
+    console.error('❌ Error loading profile:', err);
+    showToast('Error loading profile', 'danger');
+  }
+}
+
+// ============================================
+// PHOTO UPLOAD FUNCTIONALITY
+// ============================================
+function initPhotoPreview() {
+  const preview = document.getElementById('photoPreview');
+  const input = document.getElementById('photoInput');
+  const uploadBtn = document.getElementById('uploadPhotoBtn');
+  const removeBtn = document.getElementById('removePhotoBtn');
+  
+  if (!preview || !input || !uploadBtn || !removeBtn) {
+    console.error('❌ Photo modal elements not found');
+    return;
+  }
+  
+  console.log('✅ Photo preview initialized');
+  
+  preview.addEventListener('click', () => input.click());
+  
+  preview.addEventListener('dragover', (e) => {
+    e.preventDefault();
+    preview.style.borderColor = '#667eea';
+  });
+  
+  preview.addEventListener('dragleave', () => {
+    preview.style.borderColor = '#e9ecef';
+  });
+  
+  preview.addEventListener('drop', (e) => {
+    e.preventDefault();
+    preview.style.borderColor = '#e9ecef';
+    if (e.dataTransfer.files[0]) {
+      handlePhotoFile(e.dataTransfer.files[0]);
+    }
+  });
+  
+  input.addEventListener('change', () => {
+    if (input.files[0]) {
+      handlePhotoFile(input.files[0]);
+    }
+  });
+  
+  function handlePhotoFile(file) {
+    const allowedTypes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
+    
+    if (!allowedTypes.includes(file.type)) {
+      showToast('Invalid file type. Use JPG, PNG, GIF, or WebP', 'danger');
+      return;
+    }
+    
+    if (file.size > 5 * 1024 * 1024) {
+      showToast('File too large. Maximum 5MB', 'danger');
+      return;
+    }
+    
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      preview.innerHTML = `<img src="${e.target.result}" alt="Preview" style="width:100%;height:100%;object-fit:cover;border-radius:12px;">`;
+      uploadBtn.disabled = false;
+    };
+    reader.readAsDataURL(file);
+  }
+  
+  uploadBtn.addEventListener('click', async () => {
+    if (!input.files[0]) return;
+    
+    const formData = new FormData();
+    formData.append('action', 'upload_photo');
+    formData.append('photo', input.files[0]);
+    
+    uploadBtn.disabled = true;
+    uploadBtn.innerHTML = '⏳ Uploading...';
+    
+    try {
+      const res = await fetch('update_profile_provider.php', { method: 'POST', body: formData });
+      const data = await res.json();
+      
+      if (data.success) {
+        showToast(data.message, 'success');
+        closeModal('photoModal');
+        setTimeout(() => location.reload(), 1000);
+      } else {
+        showToast(data.message, 'danger');
+      }
+    } catch (err) {
+      console.error('Upload error:', err);
+      showToast('Error uploading photo', 'danger');
+    } finally {
+      uploadBtn.disabled = false;
+      uploadBtn.innerHTML = 'Upload';
+    }
+  });
+  
+  removeBtn.addEventListener('click', async () => {
+    if (!confirm('Remove your profile photo?')) return;
+    
+    removeBtn.disabled = true;
+    removeBtn.innerHTML = '⏳ Removing...';
+    
+    try {
+      const res = await fetch('update_profile_provider.php?action=remove_photo', { method: 'POST' });
+      const data = await res.json();
+      
+      if (data.success) {
+        showToast(data.message, 'success');
+        closeModal('photoModal');
+        setTimeout(() => location.reload(), 1000);
+      } else {
+        showToast(data.message, 'danger');
+      }
+    } catch (err) {
+      console.error('Remove error:', err);
+      showToast('Error removing photo', 'danger');
+    } finally {
+      removeBtn.disabled = false;
+      removeBtn.innerHTML = 'Remove Photo';
+    }
+  });
+}

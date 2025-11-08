@@ -524,24 +524,23 @@ function renderRequestCards($requests, $type) {
                 </button>';
         }
         
+        
         // Completed requests: Book Again + Rate
         if ($type === 'completed') {
             $html .= '
-                <button class="btn-success book-again-btn" 
+                <button class="btn-success book-again-simple-btn" 
                 data-skill-id="' . (int)($r['SkillID'] ?? 0) . '"
-                data-provider-id="' . (int)($r['ProviderID'] ?? 0) . '"
                 data-provider="' . htmlspecialchars($r['FName'] . ' ' . $r['LName'], ENT_QUOTES, 'UTF-8') . '">
                     📅 Book Again
                 </button>
                 ';
         }
-        
+
         // Cancelled requests: Book Again only
         if ($type === 'cancelled') {
             $html .= '
-                <button class="btn-success book-again-btn" 
+                <button class="btn-success book-again-simple-btn" 
                 data-skill-id="' . (int)($r['SkillID'] ?? 0) . '"
-                data-provider-id="' . (int)($r['ProviderID'] ?? 0) . '"
                 data-provider="' . htmlspecialchars($r['FName'] . ' ' . $r['LName'], ENT_QUOTES, 'UTF-8') . '">
                     📅 Book Again
                 </button>';
@@ -571,17 +570,82 @@ function renderRequestCards($requests, $type) {
 </head>
 <body>
 
-<header class="top-nav">
-    <div class="logo"><img src="imge/logo-.png" alt="">SkillConnect</div>
-    <nav class="nav-links">
-         <a href="#" id="dashboardLink" class="active">Dashboard</a>
-            <a href="#" id="browseLink">Browse Services</a>
-            <a href="#" id="requestsLink">My Requests</a>
-    </nav>
-    <div class="profile-dropdown">
-      <span class="user-name">Hi, <?php echo htmlspecialchars($client_name); ?></span>
-      <a href="logout.php" style="margin-left:10px; color:red;">Logout</a>
-    </div>
+        <header class="top-nav">
+            <div class="logo"><img src="imge/logo-.png" alt="">SkillConnect</div>
+            <nav class="nav-links">
+                <a href="#" id="dashboardLink" class="active">Dashboard</a>
+                    <a href="#" id="browseLink">Browse Services</a>
+                    <a href="#" id="requestsLink">My Requests</a>
+            </nav>
+        <?php
+        // Fetch full user data for profile
+        $user_query = "SELECT FName, LName, Email, Avatar, ProfilePhoto FROM users WHERE ID = ?";
+        $user_stmt = $conn->prepare($user_query);
+        $user_stmt->bind_param("i", $client_id);
+        $user_stmt->execute();
+        $user_data = $user_stmt->get_result()->fetch_assoc();
+
+        $user_initials = strtoupper(substr($user_data['FName'], 0, 1) . substr($user_data['LName'], 0, 1));
+        $profile_photo = $user_data['ProfilePhoto'] ?? $user_data['Avatar'] ?? null;
+        ?>
+
+        <div class="profile-dropdown-container">
+        <button class="profile-trigger" id="profileTrigger">
+            <?php if ($profile_photo && file_exists($profile_photo)): ?>
+            <img src="<?= htmlspecialchars($profile_photo) ?>" alt="Profile" class="profile-avatar">
+            <?php else: ?>
+            <div class="profile-avatar-initials"><?= $user_initials ?></div>
+            <?php endif; ?>
+            <span class="profile-name">Hi, <?= htmlspecialchars($user_data['FName']) ?></span>
+            <svg class="dropdown-arrow" width="12" height="12" viewBox="0 0 12 12" fill="none">
+            <path d="M2 4L6 8L10 4" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+            </svg>
+        </button>
+        
+        <div class="profile-dropdown-menu" id="profileDropdown">
+            <div class="dropdown-header">
+            <?php if ($profile_photo && file_exists($profile_photo)): ?>
+                <img src="<?= htmlspecialchars($profile_photo) ?>" alt="Profile" class="dropdown-avatar">
+            <?php else: ?>
+                <div class="dropdown-avatar-initials"><?= $user_initials ?></div>
+            <?php endif; ?>
+            <div class="dropdown-user-info">
+                <h4><?= htmlspecialchars($user_data['FName'] . ' ' . $user_data['LName']) ?></h4>
+                <p><?= htmlspecialchars($user_data['Email']) ?></p>
+            </div>
+            </div>
+            
+            <div class="dropdown-divider"></div>
+            
+            <a href="#" class="dropdown-item" onclick="openModal('profileModal'); return false;">
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+                <path d="M8 8C9.65685 8 11 6.65685 11 5C11 3.34315 9.65685 2 8 2C6.34315 2 5 3.34315 5 5C5 6.65685 6.34315 8 8 8Z" stroke="currentColor" stroke-width="1.5"/>
+                <path d="M3 14C3 11.7909 5.23858 10 8 10C10.7614 10 13 11.7909 13 14" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+            </svg>
+            Edit Profile
+            </a>
+            
+            <a href="#" class="dropdown-item" onclick="openModal('photoModal'); return false;">
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+                <rect x="2" y="4" width="12" height="10" rx="1" stroke="currentColor" stroke-width="1.5"/>
+                <circle cx="8" cy="9" r="2" stroke="currentColor" stroke-width="1.5"/>
+                <path d="M6 4L7 2H9L10 4" stroke="currentColor" stroke-width="1.5"/>
+            </svg>
+            Change Photo
+            </a>
+            
+            <div class="dropdown-divider"></div>
+            
+            <a href="logout.php" class="dropdown-item logout-item">
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+                <path d="M6 14H3C2.44772 14 2 13.5523 2 13V3C2 2.44772 2.44772 2 3 2H6" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+                <path d="M11 11L14 8L11 5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+                <path d="M14 8H6" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+            </svg>
+            Logout
+            </a>
+        </div>
+        </div>
 </header>
 
         <main class="dashboard-container">
@@ -1052,41 +1116,142 @@ function renderRequestCards($requests, $type) {
   </div>
 </div>
 
-<!-- Book Again Modal -->
-<div id="bookAgainModal" class="modal" role="dialog" aria-hidden="true">
-  <div class="modal-content">
-    <span class="close-btn">&times;</span>
-    <h3 id="bookAgainTitle">Book Service Again</h3>
-    <div id="bookAgainContent">
-      <form id="bookAgainForm" method="POST" action="client.php">
-        <input type="hidden" name="book_skill_id" id="rebookSkillId">
-        <input type="hidden" name="preferred_schedule" id="rebookScheduleHidden">
+<!-- Profile Edit Modal -->
+<div id="profileModal" class="modal profile-modal" role="dialog" aria-hidden="true">
+    <div class="modal-content">
+        <span class="close-btn" onclick="closeModal('profileModal')">&times;</span>
         
-        <div class="form-group" style="margin-bottom: 1rem;">
-          <label style="display: block; margin-bottom: 0.5rem; font-weight: 600;">
-            📅 Select New Date & Time
-          </label>
-          <input type="text" 
-                 id="rebookDatePicker" 
-                 class="flatpickr-input" 
-                 placeholder="Pick date & time" 
-                 required 
-                 readonly
-                 style="width: 100%; padding: 10px; border: 2px solid #007bff; border-radius: 8px; font-size: 1rem;">
+        <div class="modal-header-custom">
+            <h2>Edit Profile</h2>
+            <p>Update your personal information</p>
         </div>
         
-        <div class="modal-actions" style="display: flex; gap: 10px; margin-top: 1.5rem;">
-          <button type="button" class="btn-secondary" onclick="closeModal('bookAgainModal')" style="flex: 1;">
-            Cancel
-          </button>
-          <button type="submit" class="btn-primary" style="flex: 1;">
-            📅 Confirm Booking
-          </button>
+        <div class="profile-tabs">
+            <button class="profile-tab active" data-tab="basic">Basic Info</button>
+            <button class="profile-tab" data-tab="address">Address</button>
+            <button class="profile-tab" data-tab="security">Security</button>
         </div>
-      </form>
+        
+        <div class="profile-tab-content active" id="profileTab-basic">
+            <form id="basicInfoForm" class="profile-form">
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="fname">First Name</label>
+                        <input type="text" id="fname" name="fname" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="lname">Last Name</label>
+                        <input type="text" id="lname" name="lname" required>
+                    </div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="mname">Middle Name (Optional)</label>
+                        <input type="text" id="mname" name="mname">
+                    </div>
+                    <div class="form-group">
+                        <label for="phone">Phone</label>
+                        <input type="tel" id="phone" name="phone">
+                    </div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="dob">Date of Birth</label>
+                        <input type="date" id="dob" name="dob">
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label for="bio">Bio</label>
+                    <textarea id="bio" name="bio" rows="3"></textarea>
+                </div>
+                <div class="form-actions">
+                    <button type="button" class="btn-secondary" onclick="closeModal('profileModal')">Cancel</button>
+                    <button type="submit" class="btn-primary">Save Changes</button>
+                </div>
+            </form>
+        </div>
+        
+        <div class="profile-tab-content" id="profileTab-address">
+            <form id="addressForm" class="profile-form">
+                <div class="form-group">
+                    <label for="location">Street Address</label>
+                    <input type="text" id="location" name="location">
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="barangay">Barangay</label>
+                        <input type="text" id="barangay" name="barangay">
+                    </div>
+                    <div class="form-group">
+                        <label for="city">City</label>
+                        <input type="text" id="city" name="city">
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label for="province">Province</label>
+                    <input type="text" id="province" name="province">
+                </div>
+                <div class="form-actions">
+                    <button type="button" class="btn-secondary" onclick="closeModal('profileModal')">Cancel</button>
+                    <button type="submit" class="btn-primary">Save Changes</button>
+                </div>
+            </form>
+        </div>
+        
+        <div class="profile-tab-content" id="profileTab-security">
+            <div class="security-notice">
+                <svg width="20" height="20" fill="#007bff"><path d="M10 0a10 10 0 1010 10A10 10 0 0010 0zm0 18a8 8 0 118-8 8 8 0 01-8 8zm1-13H9v2h2zm0 4H9v4h2z"/></svg>
+                <p>For security, you'll need to verify your current password to make changes.</p>
+            </div>
+            <form id="passwordForm" class="profile-form">
+                <div class="form-group">
+                    <label for="current_password">Current Password</label>
+                    <input type="password" id="current_password" name="current_password" required minlength="6">
+                </div>
+                <div class="form-group">
+                    <label for="new_password">New Password</label>
+                    <input type="password" id="new_password" name="new_password" required minlength="6">
+                </div>
+                <div class="form-group">
+                    <label for="confirm_password">Confirm New Password</label>
+                    <input type="password" id="confirm_password" name="confirm_password" required minlength="6">
+                </div>
+                <div class="form-actions">
+                    <button type="button" class="btn-secondary" onclick="closeModal('profileModal')">Cancel</button>
+                    <button type="submit" class="btn-primary">Change Password</button>
+                </div>
+            </form>
+        </div>
     </div>
-  </div>
 </div>
+
+<!-- Photo Upload Modal -->
+<div id="photoModal" class="modal photo-modal" role="dialog" aria-hidden="true">
+    <div class="modal-content photo-modal-content">
+        <span class="close-btn" onclick="closeModal('photoModal')">&times;</span>
+        
+        <div class="modal-header-custom">
+            <h2>Change Profile Photo</h2>
+            <p>Upload a new photo or remove current one</p>
+        </div>
+        
+        <div class="photo-upload-area">
+            <div class="photo-preview" id="photoPreview">
+                <svg width="48" height="48" fill="#6c757d"><path d="M24 4a20 20 0 100 40 20 20 0 000-40zm0 36a16 16 0 110-32 16 16 0 010 32zm10-16a2 2 0 11-4 0 2 2 0 014 0zM14 24a2 2 0 11-4 0 2 2 0 014 0zm20 0a2 2 0 11-4 0 2 2 0 014 0zM24 14a2 2 0 11-2 2 2 2 0 012-2zm0 20a2 2 0 11-2 2 2 2 0 012-2z"/></svg>
+                <p>Click or drag photo here</p>
+                <small>JPG, PNG, GIF, WebP • Max 5MB</small>
+            </div>
+            <input type="file" id="photoInput" accept="image/jpeg,image/png,image/gif,image/webp" style="display:none;">
+            
+            <div class="form-actions" style="margin-top:20px;">
+                <button type="button" class="btn-danger" id="removePhotoBtn">Remove Photo</button>
+                <button type="button" class="btn-secondary" onclick="closeModal('photoModal')">Cancel</button>
+                <button type="button" class="btn-primary" id="uploadPhotoBtn" disabled>Upload</button>
+            </div>
+        </div>
+    </div>
+</div>
+
 
 <script src="js/vendor/flatpickr.min.js"></script>
 <script src="js/vendor/chart.umd.min.js"></script>
