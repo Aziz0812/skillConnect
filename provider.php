@@ -307,6 +307,12 @@ if (isset($_COOKIE['remember_token'])) {
             $provider_id = $_SESSION['user_id'];
             $provider_name = $_SESSION['name'] ?? 'Provider';
 
+            // Inject session data for JavaScript
+            echo '<script>';
+            echo 'window.USER_ID = ' . $provider_id . ';';
+            echo 'window.USER_ROLE = "provider";';
+            echo '</script>';
+
 
 
 
@@ -756,6 +762,7 @@ if ($my_requests) {
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap" rel="stylesheet">
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <link rel="stylesheet" href="styles/provider.css">
+    <link rel="stylesheet" href="styles/messaging.css">
 
     <style>
       /* Smooth slide up for alerts */
@@ -781,10 +788,14 @@ if ($my_requests) {
                 <img src="imge/logo-.png" alt="" height="35"> SkillConnect
             </a>
             <div class="navbar-nav">
-                <a class="nav-link active" href="#dashboard-section" id="dashboard">Dashboard</a>
-                <a class="nav-link" href="#add-skill" id="postServiceLink">Post Service</a>
-                <a class="nav-link" href="#jobs-section" id="jobsLink">My Jobs</a>
-                <a class="nav-link" href="#skills-section" id="skillsLink">My Skills</a>
+                <li class="nav-item"><a class="nav-link active" href="#dashboard-section">🏠 Dashboard</a></li>
+                <li class="nav-item"><a class="nav-link" href="#jobs-section">💼 Jobs</a></li>
+                <li class="nav-item"><a class="nav-link" href="#skills-section">🛠️ Skills</a></li>
+                
+                <a class="nav-link" href="#" id="messagesLink" style="position:relative;">
+                    💬 Messages
+                    <span class="message-badge" id="messageBadge" style="display:none;">0</span>
+                </a>
             </div>
            <?php
             // Fetch full user data for profile dropdown
@@ -1380,6 +1391,7 @@ if ($my_requests) {
                 <button class="btn btn-outline-primary active" data-tab="active">Active</button>
                 <button class="btn btn-outline-primary" data-tab="completed">Completed</button>
                 <button class="btn btn-outline-primary" data-tab="cancelled">Cancelled</button>
+                
             </div>
 
                         <!-- Active Requests -->
@@ -1388,108 +1400,116 @@ if ($my_requests) {
             <div class="row row-cols-1 row-cols-md-2 g-4">
                 <?php if (is_array($active_requests) && count($active_requests) > 0): ?>
                 <?php foreach ($active_requests as $r): ?>
-                    <div class="col">
-                    <div class="card">
-                        <div class="card-header d-flex justify-content-between align-items-center px-3 py-2"
-                            style="background-color: <?php echo getStatusColor($r['Status'] ?? ''); ?>; color:#fff;">
-                        <strong><?php echo htmlspecialchars($r['Status'] ?? 'Unknown'); ?></strong>
-                        <small>
-                            <?php
-                            $raw = $r['Schedule'] ?? null;
-                            if ($raw && preg_match('/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/', $raw)) {
-                                $dt = DateTime::createFromFormat('Y-m-d\TH:i', $raw);
-                                echo htmlspecialchars($dt ? $dt->format('F j, Y • g:i A') : 'Not set');
-                            } else {
-                                echo htmlspecialchars($raw ?: 'Not set');
-                            }
-                            ?>
-                        </small>
-                        </div>
+                    <!-- ✅ FIXED: Provider Active Request Card with Message Button -->
+            <div class="col">
+            <div class="card">
+                <div class="card-header d-flex justify-content-between align-items-center px-3 py-2"
+                    style="background-color: <?php echo getStatusColor($r['Status'] ?? ''); ?>; color:#fff;">
+                <strong><?php echo htmlspecialchars($r['Status'] ?? 'Unknown'); ?></strong>
+                <small>
+                    <?php
+                    $raw = $r['Schedule'] ?? null;
+                    if ($raw && preg_match('/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/', $raw)) {
+                        $dt = DateTime::createFromFormat('Y-m-d\TH:i', $raw);
+                        echo htmlspecialchars($dt ? $dt->format('F j, Y • g:i A') : 'Not set');
+                    } else {
+                        echo htmlspecialchars($raw ?: 'Not set');
+                    }
+                    ?>
+                </small>
+                </div>
 
-                        <div class="card-body">
-                        <div class="d-flex align-items-center mb-3">
-                            <?php if (!empty($r['Avatar'])): ?>
-                            <img src="<?php echo htmlspecialchars($r['Avatar']); ?>"
-                                alt="Avatar"
-                                class="rounded-circle me-2"
-                                style="width:40px;height:40px;object-fit:cover;">
-                            <?php else: ?>
-                            <div class="rounded-circle bg-secondary text-white d-flex align-items-center justify-content-center me-2"
-                                style="width:40px;height:40px;">
-                                <?php echo strtoupper(substr($r['FName'] ?? '?',0,1)); ?>
-                            </div>
-                            <?php endif; ?>
-                            <h6 class="mb-0">
-                            <?php echo htmlspecialchars(trim(($r['FName'] ?? '') . ' ' . ($r['LName'] ?? ''))) ?: 'Unknown Client'; ?>
-                            </h6>
-                        </div>
-
-                        <div class="d-flex justify-content-between align-items-center mb-3">
-                            <h5 class="card-title"><?php echo htmlspecialchars($r['SkillName'] ?? 'Unnamed Skill'); ?></h5>
-                            <span class="badge"
-                                style="background-color: <?php echo getStatusColor($r['Status'] ?? ''); ?>">
-                            <?php echo htmlspecialchars($r['Status'] ?? 'Unknown'); ?>
-                            </span>
-                        </div>
-
-                        <p class="card-text"><strong>Client:</strong>
-                            <?php echo htmlspecialchars(trim(($r['FName'] ?? '') . ' ' . ($r['LName'] ?? ''))) ?: 'Unknown Client'; ?>
-                        </p>
-
-                        <p class="card-text"><strong>Location:</strong>
-                            <?php 
-                                    echo htmlspecialchars(
-                                        trim(($r['Barangay'] ?? '') . ', ' . ($r['City'] ?? '') . ', ' . ($r['Province'] ?? ''), ', ')
-                                        ?: 'Unknown'
-                                    ); 
-                                    ?>
-                             </p>
-
-                        <p class="card-text"><strong>Schedule:</strong>
-                            <?php
-                            $raw = $r['Schedule'] ?? null;
-                            if ($raw && preg_match('/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/', $raw)) {
-                                $dt = DateTime::createFromFormat('Y-m-d\TH:i', $raw);
-                                echo htmlspecialchars($dt ? $dt->format('F j, Y • g:i A') : 'Not set');
-                            } else {
-                                echo htmlspecialchars($raw ?: 'Not set');
-                            }
-                            ?>
-                        </p>
-                        </div>
-
-                        <div class="card-footer bg-light d-flex justify-content-end gap-2">
-                        <?php if (strtolower($r['Status'] ?? '') === 'pending'): ?>
-                            <form method="POST" class="d-inline">
-                            <input type="hidden" name="request_id" value="<?php echo $r['RequestID'] ?? 0; ?>">
-                            <input type="hidden" name="new_status" value="Confirmed">
-                            <input type="hidden" name="return_to" value="#jobs-section">
-                            <button type="submit" name="update_status" class="btn btn-success me-2">Accept</button>
-                            </form>
-                            <form method="POST" class="d-inline">
-                            <input type="hidden" name="request_id" value="<?php echo $r['RequestID'] ?? 0; ?>">
-                            <input type="hidden" name="new_status" value="Cancelled">
-                            <input type="hidden" name="return_to" value="#jobs-section">
-                            <button type="submit" name="update_status" class="btn btn-danger">Decline</button>
-                            </form>
-                        <?php elseif (strtolower($r['Status'] ?? '') === 'confirmed'): ?>
-                            <form method="POST" class="d-inline">
-                            <input type="hidden" name="request_id" value="<?php echo $r['RequestID'] ?? 0; ?>">
-                            <input type="hidden" name="new_status" value="In Progress">
-                            <input type="hidden" name="return_to" value="#jobs-section">
-                            <button type="submit" name="update_status" class="btn btn-warning">Start</button>
-                            </form>
-                        <?php elseif (strtolower($r['Status'] ?? '') === 'in progress'): ?>
-                            <form method="POST" class="d-inline">
-                            <input type="hidden" name="request_id" value="<?php echo $r['RequestID'] ?? 0; ?>">
-                            <input type="hidden" name="new_status" value="Completed">
-                            <input type="hidden" name="return_to" value="#jobs-section">
-                            <button type="submit" name="update_status" class="btn btn-success">Complete</button>
-                            </form>
-                        <?php endif; ?>
-                        </div>
+                <div class="card-body">
+                <div class="d-flex align-items-center mb-3">
+                    <?php if (!empty($r['Avatar'])): ?>
+                    <img src="<?php echo htmlspecialchars($r['Avatar']); ?>"
+                        alt="Avatar"
+                        class="rounded-circle me-2"
+                        style="width:40px;height:40px;object-fit:cover;">
+                    <?php else: ?>
+                    <div class="rounded-circle bg-secondary text-white d-flex align-items-center justify-content-center me-2"
+                        style="width:40px;height:40px;">
+                    <?php echo strtoupper(substr($r['FName'] ?? '?',0,1)); ?>
                     </div>
-                    </div>
+                    <?php endif; ?>
+                    <h6 class="mb-0">
+                    <?php echo htmlspecialchars(trim(($r['FName'] ?? '') . ' ' . ($r['LName'] ?? ''))) ?: 'Unknown Client'; ?>
+                    </h6>
+                </div>
+
+                <div class="d-flex justify-content-between align-items-center mb-3">
+                    <h5 class="card-title"><?php echo htmlspecialchars($r['SkillName'] ?? 'Unnamed Skill'); ?></h5>
+                    <span class="badge"
+                        style="background-color: <?php echo getStatusColor($r['Status'] ?? ''); ?>">
+                    <?php echo htmlspecialchars($r['Status'] ?? 'Unknown'); ?>
+                    </span>
+                </div>
+
+                <p class="card-text"><strong>Client:</strong>
+                    <?php echo htmlspecialchars(trim(($r['FName'] ?? '') . ' ' . ($r['LName'] ?? ''))) ?: 'Unknown Client'; ?>
+                </p>
+
+                <p class="card-text"><strong>Location:</strong>
+                    <?php 
+                    echo htmlspecialchars(
+                        trim(($r['Barangay'] ?? '') . ', ' . ($r['City'] ?? '') . ', ' . ($r['Province'] ?? ''), ', ')
+                        ?: 'Unknown'
+                    ); 
+                    ?>
+                </p>
+
+                <p class="card-text"><strong>Schedule:</strong>
+                    <?php
+                    $raw = $r['Schedule'] ?? null;
+                    if ($raw && preg_match('/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/', $raw)) {
+                        $dt = DateTime::createFromFormat('Y-m-d\TH:i', $raw);
+                        echo htmlspecialchars($dt ? $dt->format('F j, Y • g:i A') : 'Not set');
+                    } else {
+                        echo htmlspecialchars($raw ?: 'Not set');
+                    }
+                    ?>
+                </p>
+                </div>
+
+                <div class="card-footer bg-light d-flex justify-content-between gap-2">
+                <!-- ✅ NEW: Message Client Button -->
+                <button class="btn btn-primary flex-fill" 
+                        onclick="startMessageFromRequest(<?= (int)$r['RequestID'] ?>)"
+                        style="background: linear-gradient(135deg, #667eea, #764ba2); border: none;">
+                    💬 Message Client
+                </button>
+                
+                <?php if (strtolower($r['Status'] ?? '') === 'pending'): ?>
+                    <form method="POST" class="d-inline flex-fill">
+                    <input type="hidden" name="request_id" value="<?php echo $r['RequestID'] ?? 0; ?>">
+                    <input type="hidden" name="new_status" value="Confirmed">
+                    <input type="hidden" name="return_to" value="#jobs-section">
+                    <button type="submit" name="update_status" class="btn btn-success w-100">Accept</button>
+                    </form>
+                    <form method="POST" class="d-inline flex-fill">
+                    <input type="hidden" name="request_id" value="<?php echo $r['RequestID'] ?? 0; ?>">
+                    <input type="hidden" name="new_status" value="Cancelled">
+                    <input type="hidden" name="return_to" value="#jobs-section">
+                    <button type="submit" name="update_status" class="btn btn-danger w-100">Decline</button>
+                    </form>
+                <?php elseif (strtolower($r['Status'] ?? '') === 'confirmed'): ?>
+                    <form method="POST" class="d-inline flex-fill">
+                    <input type="hidden" name="request_id" value="<?php echo $r['RequestID'] ?? 0; ?>">
+                    <input type="hidden" name="new_status" value="In Progress">
+                    <input type="hidden" name="return_to" value="#jobs-section">
+                    <button type="submit" name="update_status" class="btn btn-warning w-100">Start</button>
+                    </form>
+                <?php elseif (strtolower($r['Status'] ?? '') === 'in progress'): ?>
+                    <form method="POST" class="d-inline flex-fill">
+                    <input type="hidden" name="request_id" value="<?php echo $r['RequestID'] ?? 0; ?>">
+                    <input type="hidden" name="new_status" value="Completed">
+                    <input type="hidden" name="return_to" value="#jobs-section">
+                    <button type="submit" name="update_status" class="btn btn-success w-100">Complete</button>
+                    </form>
+                <?php endif; ?>
+                </div>
+            </div>
+            </div>
                 <?php endforeach; ?>
                 <?php else: ?>
                 <div class="alert alert-info" role="alert">No active requests.</div>
@@ -1694,150 +1714,224 @@ if ($my_requests) {
                     <?php endif; ?>
                 </div>
 
-                                <!-- Profile Edit Modal -->
-                <div id="profileModal" class="modal profile-modal" role="dialog" aria-hidden="true">
-                    <div class="modal-content">
-                        <span class="close-btn" onclick="closeModal('profileModal')">&times;</span>
-                        
-                        <div class="modal-header-custom">
-                            <h2>✏️ Edit Profile</h2>
-                            <p>Update your personal information</p>
-                        </div>
-                        
-                        <div class="profile-tabs">
-                            <button class="profile-tab active" data-tab="basic">Basic Info</button>
-                            <button class="profile-tab" data-tab="address">Address</button>
-                            <button class="profile-tab" data-tab="security">Security</button>
-                        </div>
-                        
-                        <div class="profile-tab-content active" id="profileTab-basic">
-                            <form id="basicInfoForm" class="profile-form">
-                                <div class="form-row">
-                                    <div class="form-group">
-                                        <label for="fname">First Name</label>
-                                        <input type="text" id="fname" name="fname" required>
-                                    </div>
-                                    <div class="form-group">
-                                        <label for="lname">Last Name</label>
-                                        <input type="text" id="lname" name="lname" required>
-                                    </div>
-                                </div>
-                                <div class="form-row">
-                                    <div class="form-group">
-                                        <label for="mname">Middle Name (Optional)</label>
-                                        <input type="text" id="mname" name="mname">
-                                    </div>
-                                    <div class="form-group">
-                                        <label for="phone">Phone</label>
-                                        <input type="tel" id="phone" name="phone">
-                                    </div>
-                                </div>
-                                <div class="form-row">
-                                    <div class="form-group">
-                                        <label for="dob">Date of Birth</label>
-                                        <input type="date" id="dob" name="dob">
-                                    </div>
-                                </div>
-                                <div class="form-group">
-                                    <label for="bio">Bio</label>
-                                    <textarea id="bio" name="bio" rows="3"></textarea>
-                                </div>
-                                <div class="form-actions">
-                                    <button type="button" class="btn-secondary" onclick="closeModal('profileModal')">Cancel</button>
-                                    <button type="submit" class="btn-primary">Save Changes</button>
-                                </div>
-                            </form>
-                        </div>
-                        
-                        <div class="profile-tab-content" id="profileTab-address">
-                            <form id="addressForm" class="profile-form">
-                                <div class="form-group">
-                                    <label for="location">Street Address</label>
-                                    <input type="text" id="location" name="location">
-                                </div>
-                                <div class="form-row">
-                                    <div class="form-group">
-                                        <label for="barangay">Barangay</label>
-                                        <input type="text" id="barangay" name="barangay">
-                                    </div>
-                                    <div class="form-group">
-                                        <label for="city">City</label>
-                                        <input type="text" id="city" name="city">
-                                    </div>
-                                </div>
-                                <div class="form-group">
-                                    <label for="province">Province</label>
-                                    <input type="text" id="province" name="province">
-                                </div>
-                                <div class="form-actions">
-                                    <button type="button" class="btn-secondary" onclick="closeModal('profileModal')">Cancel</button>
-                                    <button type="submit" class="btn-primary">Save Changes</button>
-                                </div>
-                            </form>
-                        </div>
-                        
-                        <div class="profile-tab-content" id="profileTab-security">
-                            <div class="security-notice">
-                                <span style="font-size: 20px;">🔒</span>
-                                <p>For security, you'll need to verify your current password to make changes.</p>
-                            </div>
-                            <form id="passwordForm" class="profile-form">
-                                <div class="form-group">
-                                    <label for="current_password">Current Password</label>
-                                    <input type="password" id="current_password" name="current_password" required minlength="6">
-                                </div>
-                                <div class="form-group">
-                                    <label for="new_password">New Password</label>
-                                    <input type="password" id="new_password" name="new_password" required minlength="6">
-                                </div>
-                                <div class="form-group">
-                                    <label for="confirm_password">Confirm New Password</label>
-                                    <input type="password" id="confirm_password" name="confirm_password" required minlength="6">
-                                </div>
-                                <div class="form-actions">
-                                    <button type="button" class="btn-secondary" onclick="closeModal('profileModal')">Cancel</button>
-                                    <button type="submit" class="btn-primary">Change Password</button>
-                                </div>
-                            </form>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Photo Upload Modal -->
-               <div id="photoModal" class="modal photo-modal" role="dialog" aria-hidden="true">
-                <div class="modal-content photo-modal-content">
-                    <span class="close-btn" onclick="closeModal('photoModal')">&times;</span>
-                    
-                    <div class="modal-header-custom">
-                        <h2>📷 Change Profile Photo</h2>
-                        <p>Upload a new photo or remove current one</p>
-                    </div>
-                    
-                    <div class="photo-upload-area">
-                        <div class="photo-preview" id="photoPreview">
-                            <span style="font-size: 48px;">📸</span>
-                            <p>Click or drag photo here</p>
-                            <small>JPG, PNG, GIF, WebP • Max 5MB</small>
-                        </div>
-                        <input type="file" id="photoInput" accept="image/jpeg,image/png,image/gif,image/webp" style="display:none;">
-                        
-                        <div class="form-actions" style="margin-top:20px;">
-                            <button type="button" class="btn-danger" id="removePhotoBtn">Remove Photo</button>
-                            <button type="button" class="btn-secondary" onclick="closeModal('photoModal')">Cancel</button>
-                            <button type="button" class="btn-primary" id="uploadPhotoBtn" disabled>Upload</button>
-                        </div>
-                    </div>
-                </div>
-            </div>
+  
 
     </main>
+                                 <!-- ============================================ -->
+<!-- FIXED PROFILE MODAL - Replace your existing profileModal -->
+<!-- ============================================ -->
+<div id="profileModal" class="modal profile-modal" role="dialog">
+    <div class="modal-content">
+        <span class="close-btn" onclick="closeModal('profileModal')">&times;</span>
+        
+        <div class="modal-header-custom">
+            <h2>✏️ Edit Profile</h2>
+            <p>Update your personal information</p>
+        </div>
+        
+        <div class="profile-tabs">
+            <button class="profile-tab active" data-tab="basic">Basic Info</button>
+            <button class="profile-tab" data-tab="address">Address</button>
+            <button class="profile-tab" data-tab="security">Security</button>
+        </div>
+        
+        <div class="profile-tab-content active" id="profileTab-basic">
+            <form id="basicInfoForm" class="profile-form">
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="fname">First Name</label>
+                        <input type="text" id="fname" name="fname" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="lname">Last Name</label>
+                        <input type="text" id="lname" name="lname" required>
+                    </div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="mname">Middle Name (Optional)</label>
+                        <input type="text" id="mname" name="mname">
+                    </div>
+                    <div class="form-group">
+                        <label for="phone">Phone</label>
+                        <input type="tel" id="phone" name="phone">
+                    </div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="dob">Date of Birth</label>
+                        <input type="date" id="dob" name="dob">
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label for="bio">Bio</label>
+                    <textarea id="bio" name="bio" rows="3"></textarea>
+                </div>
+                <div class="form-actions">
+                    <button type="button" class="btn-secondary" onclick="closeModal('profileModal')">Cancel</button>
+                    <button type="submit" class="btn-primary">Save Changes</button>
+                </div>
+            </form>
+        </div>
+        
+        <div class="profile-tab-content" id="profileTab-address">
+            <form id="addressForm" class="profile-form">
+                <div class="form-group">
+                    <label for="location">Street Address</label>
+                    <input type="text" id="location" name="location">
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="barangay">Barangay</label>
+                        <input type="text" id="barangay" name="barangay">
+                    </div>
+                    <div class="form-group">
+                        <label for="city">City</label>
+                        <input type="text" id="city" name="city">
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label for="province">Province</label>
+                    <input type="text" id="province" name="province">
+                </div>
+                <div class="form-actions">
+                    <button type="button" class="btn-secondary" onclick="closeModal('profileModal')">Cancel</button>
+                    <button type="submit" class="btn-primary">Save Changes</button>
+                </div>
+            </form>
+        </div>
+        
+        <div class="profile-tab-content" id="profileTab-security">
+            <div class="security-notice">
+                <span style="font-size: 20px;">🔒</span>
+                <p>For security, you'll need to verify your current password to make changes.</p>
+            </div>
+            <form id="passwordForm" class="profile-form">
+                <div class="form-group">
+                    <label for="current_password">Current Password</label>
+                    <input type="password" id="current_password" name="current_password" required minlength="6">
+                </div>
+                <div class="form-group">
+                    <label for="new_password">New Password</label>
+                    <input type="password" id="new_password" name="new_password" required minlength="6">
+                </div>
+                <div class="form-group">
+                    <label for="confirm_password">Confirm New Password</label>
+                    <input type="password" id="confirm_password" name="confirm_password" required minlength="6">
+                </div>
+                <div class="form-actions">
+                    <button type="button" class="btn-secondary" onclick="closeModal('profileModal')">Cancel</button>
+                    <button type="submit" class="btn-primary">Change Password</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
 
-    <!-- Bootstrap JS and Custom JS -->
+<!-- ============================================ -->
+<!-- FIXED PHOTO MODAL - Replace your existing photoModal -->
+<!-- ============================================ -->
+<div id="photoModal" class="modal photo-modal" role="dialog">
+    <div class="modal-content photo-modal-content">
+        <span class="close-btn" onclick="closeModal('photoModal')">&times;</span>
+        
+        <div class="modal-header-custom">
+            <h2>📷 Change Profile Photo</h2>
+            <p>Upload a new photo or remove current one</p>
+        </div>
+        
+        <div class="photo-upload-area">
+            <div class="photo-preview" id="photoPreview">
+                <span style="font-size: 48px;">📸</span>
+                <p>Click or drag photo here</p>
+                <small>JPG, PNG, GIF, WebP • Max 5MB</small>
+            </div>
+            <input type="file" id="photoInput" accept="image/jpeg,image/png,image/gif,image/webp" style="display:none;">
+            
+            <div class="form-actions" style="margin-top:20px;">
+                <button type="button" class="btn-danger" id="removePhotoBtn">Remove Photo</button>
+                <button type="button" class="btn-secondary" onclick="closeModal('photoModal')">Cancel</button>
+                <button type="button" class="btn-primary" id="uploadPhotoBtn" disabled>Upload</button>
+            </div>
+        </div>
+    </div>
+</div>
+                <!-- Messaging Modal -->
+            <div id="messagingModal" class="modal messaging-modal" role="dialog" aria-hidden="true">
+            <div class="modal-content messaging-modal-content">
+                <div class="messaging-container">
+                
+                <!-- Sidebar -->
+                <div class="conversations-sidebar">
+                    <div class="conversations-header">
+                    <h3>💬 Messages</h3>
+                    <button class="close-btn" onclick="closeModal('messagingModal')">&times;</button>
+                    </div>
+                    
+                    <div id="conversationsList" class="conversations-list">
+                    <div class="loading-state">
+                        <div class="spinner"></div>
+                        <p>Loading conversations...</p>
+                    </div>
+                    </div>
+                </div>
+                
+                <!-- Chat Window -->
+                <div class="chat-window">
+                    <div id="chatPlaceholder" class="chat-placeholder active">
+                    <div class="placeholder-content">
+                        <svg width="80" height="80" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                        <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+                        </svg>
+                        <h3>Select a conversation</h3>
+                        <p>Choose a conversation from the list to start messaging</p>
+                    </div>
+                    </div>
+                    
+                    <div id="chatContainer" class="chat-container">
+                    <div class="chat-header">
+                        <div class="chat-header-info">
+                        <div class="contact-avatar"></div>
+                        <div class="contact-details">
+                            <h4 id="contactName">Loading...</h4>
+                            <p id="contactService">Service details</p>
+                        </div>
+                        </div>
+                    </div>
+                    
+                    <div id="messagesContainer" class="messages-container">
+                        <!-- Messages will appear here -->
+                    </div>
+                    
+                    <div class="chat-input-container">
+                        <form id="messageForm" class="message-form">
+                        <input 
+                            type="text" 
+                            id="messageInput" 
+                            placeholder="Type your message..." 
+                            autocomplete="off"
+                            maxlength="1000"
+                        />
+                        <button type="submit" class="btn-send" disabled>
+                            <span>Send</span>
+                        </button>
+                        </form>
+                    </div>
+                    </div>
+                </div>
+                
+                </div>
+            </div>
+            </div>
+<!-- Bootstrap JS -->
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
-    <script src="js/provider.js"></script>
+    
+    <!-- ✅ Chart.js MUST load BEFORE provider.js -->
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     
-
+    <!-- ✅ Custom JS -->
+    <script src="js/provider.js"></script>
+    
     <script>
     // Tabs functionality (keeps original behavior)
     document.querySelectorAll('.btn-outline-primary[data-tab]').forEach(btn => {
@@ -1871,7 +1965,7 @@ if ($my_requests) {
         }
     });
 
-    // Attach current hash to all POST forms before submit (so server can redirect back to same section)
+    // Attach current hash to all POST forms before submit
     document.addEventListener('submit', function(e) {
         const form = e.target;
         if (!form || form.method.toLowerCase() !== 'post') return;
@@ -1882,16 +1976,14 @@ if ($my_requests) {
             input.name = 'return_to';
             form.appendChild(input);
         }
-        // If current location hash is empty on initial load (like after login), keep dashboard default
         input.value = location.hash ? location.hash : '#dashboard-section';
     });
 
-    // Smooth slide-up auto hide for alerts (5s) and respect manual close
+    // Smooth slide-up auto hide for alerts
     document.addEventListener('DOMContentLoaded', () => {
-        const autoHideDelay = 5000; // 5 seconds
+        const autoHideDelay = 5000;
         const alerts = document.querySelectorAll('.alert.alert-dismissible');
         alerts.forEach(alert => {
-            // If user manually closes, remove immediately and avoid re-show on reload (server side handles it)
             const closeBtn = alert.querySelector('.btn-close');
             if (closeBtn) {
                 closeBtn.addEventListener('click', () => {
@@ -1899,7 +1991,6 @@ if ($my_requests) {
                     setTimeout(() => alert.remove(), 450);
                 });
             }
-            // Auto slide after delay
             setTimeout(() => {
                 alert.classList.add('hiding');
                 setTimeout(() => alert.remove(), 450);
@@ -1907,5 +1998,26 @@ if ($my_requests) {
         });
     });
     </script>
+
+    <!-- ✅ Messaging Scripts -->
+    <script type="module" src="js/messaging.js"></script>
+    <script src="js/messaging-integration.js"></script>
+
+    <script>
+    document.addEventListener('DOMContentLoaded', () => {
+        const messagesLink = document.getElementById('messagesLink');
+        if (messagesLink) {
+            messagesLink.addEventListener('click', (e) => {
+                e.preventDefault();
+                openModal('messagingModal');
+                setTimeout(() => initMessaging(), 300);
+            });
+        }
+    });
+    </script>
+
+
+
+
 </body>
 </html>

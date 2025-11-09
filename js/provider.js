@@ -1,3 +1,7 @@
+// ============================================
+// PROVIDER.JS - COMPLETE FIXED VERSION
+// ============================================
+
 document.addEventListener('DOMContentLoaded', () => {
   console.log("✅ DOM fully loaded");
 
@@ -6,7 +10,6 @@ document.addEventListener('DOMContentLoaded', () => {
     window.location.search.includes('updated=1') ||
     window.location.search.includes('deleted=1')) {
     
-    // Clean URL and set hash in one operation
     const cleanUrl = window.location.pathname + "#skills-section";
     window.history.replaceState({}, '', cleanUrl);
     localStorage.setItem('activeSection', 'skills-section');
@@ -14,7 +17,6 @@ document.addEventListener('DOMContentLoaded', () => {
   
   // Handle job status updates
   if (window.location.search.includes('job_updated=1')) {
-    // Clean URL and set hash in one operation
     const hash = window.location.hash || '#jobs-section';
     const cleanUrl = window.location.pathname + hash;
     window.history.replaceState({}, '', cleanUrl);
@@ -549,6 +551,15 @@ document.addEventListener('DOMContentLoaded', () => {
   async function loadCharts() {
     console.log('Loading charts...');
 
+    if (window.requestsTimeChart) {
+      window.requestsTimeChart.destroy();
+      window.requestsTimeChart = null;
+    }
+    if (window.statusChart) {
+      window.statusChart.destroy();
+      window.statusChart = null;
+    }
+
     const timeRes = await fetchJSON(`${base}&action=requests_over_time`);
     const timeCtx = document.getElementById('requestsOverTimeChart')?.getContext('2d');
 
@@ -558,34 +569,33 @@ document.addEventListener('DOMContentLoaded', () => {
 
       if (labels.length === 0) {
         timeCtx.canvas.parentElement.innerHTML += '<div class="text-muted text-center mt-2">No request data over time.</div>';
-        return;
-      }
-
-      new Chart(timeCtx, {
-        type: 'line',
-        data: {
-          labels: labels,
-          datasets: [{
-            label: 'Requests Over Time',
-            data: counts,
-            borderColor: '#007bff',
-            backgroundColor: 'rgba(0, 123, 255, 0.1)',
-            fill: true,
-            tension: 0.4
-          }]
-        },
-        options: {
-          scales: {
-            y: {
-              beginAtZero: true,
-              title: { display: true, text: 'Number of Requests' }
-            },
-            x: {
-              title: { display: true, text: 'Month' }
+      } else {
+        window.requestsTimeChart = new Chart(timeCtx, {
+          type: 'line',
+          data: {
+            labels: labels,
+            datasets: [{
+              label: 'Requests Over Time',
+              data: counts,
+              borderColor: '#007bff',
+              backgroundColor: 'rgba(0, 123, 255, 0.1)',
+              fill: true,
+              tension: 0.4
+            }]
+          },
+          options: {
+            scales: {
+              y: {
+                beginAtZero: true,
+                title: { display: true, text: 'Number of Requests' }
+              },
+              x: {
+                title: { display: true, text: 'Month' }
+              }
             }
           }
-        }
-      });
+        });
+      }
     }
 
     const statusRes = await fetchJSON(`${base}&action=status_summary`);
@@ -598,27 +608,26 @@ document.addEventListener('DOMContentLoaded', () => {
       const total = counts.reduce((a, b) => a + b, 0);
       if (total === 0) {
         statusCtx.canvas.parentElement.innerHTML += '<div class="text-muted text-center mt-2">No request status data.</div>';
-        return;
-      }
-
-      new Chart(statusCtx, {
-        type: 'pie',
-        data: {
-          labels: statuses,
-          datasets: [{
-            label: 'Request Status',
-            data: counts,
-            backgroundColor: ['#ffc107', '#17a2b8', '#007bff', '#28a745', '#dc3545'],
-            borderColor: ['#e0a800', '#138496', '#0056b3', '#1e7e34', '#b02a37'],
-            borderWidth: 1
-          }]
-        },
-        options: {
-          plugins: {
-            legend: { position: 'top' }
+      } else {
+        window.statusChart = new Chart(statusCtx, {
+          type: 'pie',
+          data: {
+            labels: statuses,
+            datasets: [{
+              label: 'Request Status',
+              data: counts,
+              backgroundColor: ['#ffc107', '#17a2b8', '#007bff', '#28a745', '#dc3545'],
+              borderColor: ['#e0a800', '#138496', '#0056b3', '#1e7e34', '#b02a37'],
+              borderWidth: 1
+            }]
+          },
+          options: {
+            plugins: {
+              legend: { position: 'top' }
+            }
           }
-        }
-      });
+        });
+      }
     }
    
     const topSkillsContainer = document.getElementById('topSkillsContainer');
@@ -671,7 +680,6 @@ document.addEventListener('DOMContentLoaded', () => {
     new bootstrap.Toast(toastEl, { delay: 4000 }).show();
   });
 
-  // Automatically show messages passed from PHP
   if (window.success_message) showToast(window.success_message, 'success');
   if (window.error_message) showToast(window.error_message, 'danger');
 
@@ -703,8 +711,8 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
 
-// ============================================
-  // PROFILE TAB SWITCHING (INSIDE EXISTING DOMContentLoaded)
+  // ============================================
+  // PROFILE TAB SWITCHING
   // ============================================
   document.querySelectorAll('.profile-tab').forEach(tab => {
     tab.addEventListener('click', function() {
@@ -858,7 +866,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
 
 // ============================================
-// GLOBAL HELPER FUNCTIONS (OUTSIDE DOMContentLoaded)
+// GLOBAL FUNCTIONS (OUTSIDE DOMContentLoaded)
 // ============================================
 
 function showToast(message, type = 'success') {
@@ -897,20 +905,18 @@ window.openModal = function(modalId) {
   }
   
   modal.style.display = 'flex';
-  modal.offsetHeight;
+  document.body.style.overflow = 'hidden';
   
   requestAnimationFrame(() => {
     modal.classList.add('show');
-    document.body.style.overflow = 'hidden';
     
-    // Load data AFTER modal is visible
     if (modalId === 'profileModal') {
-      console.log('📝 Loading profile...');
+      console.log('📝 Loading profile data...');
       setTimeout(() => loadProfileData(), 100);
     }
     
     if (modalId === 'photoModal') {
-      console.log('📷 Initializing photo...');
+      console.log('📷 Initializing photo upload...');
       setTimeout(() => initPhotoPreview(), 100);
     }
   });
@@ -932,39 +938,49 @@ window.closeModal = function(modalId) {
 // PROFILE DATA LOADING
 // ============================================
 async function loadProfileData() {
+  console.log('📡 Fetching profile data from server...');
+  
   try {
-    console.log('🔄 Fetching profile data...');
-    const res = await fetch('update_profile_provider.php?action=get_profile', { method: 'POST' });
-    const data = await res.json();
+    const res = await fetch('update_profile_provider.php?action=get_profile', { 
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' }
+    });
     
-    console.log('📦 Profile data:', data);
+    const data = await res.json();
+    console.log('📦 Profile data received:', data);
     
     if (data.success) {
       const user = data.data;
       const fields = {
-        fname: user.FName,
-        lname: user.LName,
-        mname: user.MName,
-        phone: user.Phone,
-        dob: user.DateOfBirth,
-        bio: user.Bio,
-        location: user.Location,
-        city: user.City,
-        province: user.Province,
-        barangay: user.Barangay
+        fname: user.FName || '',
+        lname: user.LName || '',
+        mname: user.MName || '',
+        phone: user.Phone || '',
+        dob: user.DateOfBirth || '',
+        bio: user.Bio || '',
+        location: user.Location || '',
+        city: user.City || '',
+        province: user.Province || '',
+        barangay: user.Barangay || ''
       };
       
       Object.entries(fields).forEach(([id, value]) => {
         const el = document.getElementById(id);
-        if (el) el.value = value || '';
+        if (el) {
+          el.value = value;
+          console.log(`✅ Set ${id}:`, value);
+        } else {
+          console.warn(`⚠️ Field not found: ${id}`);
+        }
       });
       
-      console.log('✅ Profile data loaded');
+      console.log('✅ Profile data loaded successfully');
     } else {
-      showToast('Failed to load profile', 'danger');
+      console.error('❌ Server error:', data.message);
+      showToast(data.message || 'Failed to load profile', 'danger');
     }
   } catch (err) {
-    console.error('❌ Error loading profile:', err);
+    console.error('❌ Network error loading profile:', err);
     showToast('Error loading profile', 'danger');
   }
 }
@@ -973,66 +989,95 @@ async function loadProfileData() {
 // PHOTO UPLOAD FUNCTIONALITY
 // ============================================
 function initPhotoPreview() {
+  console.log('📸 Initializing photo preview...');
+  
   const preview = document.getElementById('photoPreview');
   const input = document.getElementById('photoInput');
   const uploadBtn = document.getElementById('uploadPhotoBtn');
   const removeBtn = document.getElementById('removePhotoBtn');
   
   if (!preview || !input || !uploadBtn || !removeBtn) {
-    console.error('❌ Photo modal elements not found');
+    console.error('❌ Photo modal elements not found:', {
+      preview: !!preview,
+      input: !!input,
+      uploadBtn: !!uploadBtn,
+      removeBtn: !!removeBtn
+    });
     return;
   }
   
-  console.log('✅ Photo preview initialized');
+  console.log('✅ Photo elements found, setting up listeners...');
   
-  preview.addEventListener('click', () => input.click());
+  // Click to upload
+  preview.onclick = () => {
+    console.log('📁 Opening file picker...');
+    input.click();
+  };
   
-  preview.addEventListener('dragover', (e) => {
+  // Drag & drop
+  preview.ondragover = (e) => {
     e.preventDefault();
     preview.style.borderColor = '#667eea';
-  });
+  };
   
-  preview.addEventListener('dragleave', () => {
+  preview.ondragleave = () => {
     preview.style.borderColor = '#e9ecef';
-  });
+  };
   
-  preview.addEventListener('drop', (e) => {
+  preview.ondrop = (e) => {
     e.preventDefault();
     preview.style.borderColor = '#e9ecef';
     if (e.dataTransfer.files[0]) {
+      console.log('📥 File dropped:', e.dataTransfer.files[0].name);
       handlePhotoFile(e.dataTransfer.files[0]);
     }
-  });
+  };
   
-  input.addEventListener('change', () => {
+  // File input change
+  input.onchange = () => {
+    console.log('📁 File selected:', input.files[0]?.name);
     if (input.files[0]) {
       handlePhotoFile(input.files[0]);
     }
-  });
+  };
   
+  // Handle photo file
   function handlePhotoFile(file) {
+    console.log('🔍 Validating file:', file.name, file.type, `${(file.size/1024/1024).toFixed(2)}MB`);
+    
     const allowedTypes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
     
     if (!allowedTypes.includes(file.type)) {
+      console.error('❌ Invalid file type:', file.type);
       showToast('Invalid file type. Use JPG, PNG, GIF, or WebP', 'danger');
       return;
     }
     
     if (file.size > 5 * 1024 * 1024) {
+      console.error('❌ File too large:', file.size);
       showToast('File too large. Maximum 5MB', 'danger');
       return;
     }
+    
+    console.log('✅ File valid, creating preview...');
     
     const reader = new FileReader();
     reader.onload = (e) => {
       preview.innerHTML = `<img src="${e.target.result}" alt="Preview" style="width:100%;height:100%;object-fit:cover;border-radius:12px;">`;
       uploadBtn.disabled = false;
+      console.log('✅ Preview created, upload button enabled');
     };
     reader.readAsDataURL(file);
   }
   
-  uploadBtn.addEventListener('click', async () => {
-    if (!input.files[0]) return;
+  // Upload button
+  uploadBtn.onclick = async () => {
+    if (!input.files[0]) {
+      console.warn('⚠️ No file selected');
+      return;
+    }
+    
+    console.log('📤 Uploading photo...');
     
     const formData = new FormData();
     formData.append('action', 'upload_photo');
@@ -1042,48 +1087,85 @@ function initPhotoPreview() {
     uploadBtn.innerHTML = '⏳ Uploading...';
     
     try {
-      const res = await fetch('update_profile_provider.php', { method: 'POST', body: formData });
+      const res = await fetch('update_profile_provider.php', { 
+        method: 'POST', 
+        body: formData 
+      });
+      
       const data = await res.json();
+      console.log('📦 Upload response:', data);
       
       if (data.success) {
+        console.log('✅ Upload successful:', data.photo_url);
         showToast(data.message, 'success');
         closeModal('photoModal');
         setTimeout(() => location.reload(), 1000);
       } else {
+        console.error('❌ Upload failed:', data.message);
         showToast(data.message, 'danger');
       }
     } catch (err) {
-      console.error('Upload error:', err);
+      console.error('❌ Network error during upload:', err);
       showToast('Error uploading photo', 'danger');
     } finally {
       uploadBtn.disabled = false;
       uploadBtn.innerHTML = 'Upload';
     }
-  });
+  };
   
-  removeBtn.addEventListener('click', async () => {
+  // Remove button
+  removeBtn.onclick = async () => {
     if (!confirm('Remove your profile photo?')) return;
+    
+    console.log('🗑️ Removing photo...');
     
     removeBtn.disabled = true;
     removeBtn.innerHTML = '⏳ Removing...';
     
     try {
-      const res = await fetch('update_profile_provider.php?action=remove_photo', { method: 'POST' });
+      const res = await fetch('update_profile_provider.php?action=remove_photo', { 
+        method: 'POST' 
+      });
+      
       const data = await res.json();
+      console.log('📦 Remove response:', data);
       
       if (data.success) {
+        console.log('✅ Photo removed');
         showToast(data.message, 'success');
         closeModal('photoModal');
         setTimeout(() => location.reload(), 1000);
       } else {
+        console.error('❌ Remove failed:', data.message);
         showToast(data.message, 'danger');
       }
     } catch (err) {
-      console.error('Remove error:', err);
+      console.error('❌ Network error during removal:', err);
       showToast('Error removing photo', 'danger');
     } finally {
       removeBtn.disabled = false;
       removeBtn.innerHTML = 'Remove Photo';
     }
-  });
+  };
+  
+  console.log('✅ Photo preview fully initialized');
 }
+
+// ============================================
+// CLOSE MODALS ON ESC AND OUTSIDE CLICK
+// ============================================
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape') {
+    document.querySelectorAll('.modal.show').forEach(modal => {
+      closeModal(modal.id);
+    });
+  }
+});
+
+document.addEventListener('click', (e) => {
+  if (e.target.classList.contains('modal') && e.target.classList.contains('show')) {
+    closeModal(e.target.id);
+  }
+});
+
+console.log('✅ Provider.js fully loaded and ready');

@@ -2,6 +2,17 @@
 session_start();
 require "db.php";
 
+// ✅ FIX: Only inject JS for non-AJAX page loads (prevents JSON corruption)
+if (!isset($_GET['ajax']) || $_GET['ajax'] !== '1') {
+    // Inject session data for JavaScript
+    echo '<script>';
+    echo 'window.USER_ID = ' . (isset($_SESSION['user_id']) ? (int)$_SESSION['user_id'] : 'null') . ';';
+    echo 'window.USER_ROLE = "' . ($_SESSION['role'] ?? '') . '";';
+    echo '</script>';
+}
+
+
+
         if (isset($_GET['ajax']) && $_GET['ajax'] === '1') {
             header('Content-Type: application/json; charset=utf-8');
 
@@ -511,39 +522,22 @@ function renderRequestCards($requests, $type) {
 
             <div class="request-actions">';
         
-        // Active requests: Cancel + Contact
+        // Active requests: Cancel + Message
         if ($type === 'active') {
             if ($canCancel) {
                 $html .= '<button class="btn-secondary cancel-request-btn" data-request-id="' . (int)$r['RequestID'] . '">Cancel Request</button>';
             }
-            $html .= '
-                <button class="btn-primary contact-provider-btn" 
-                        data-provider="' . htmlspecialchars($r['FName'] . ' ' . $r['LName'], ENT_QUOTES, 'UTF-8') . '"
-                        data-service="' . htmlspecialchars($r['SkillName'], ENT_QUOTES, 'UTF-8') . '">
-                    Contact Provider
-                </button>';
+            $html .= '<button class="btn-primary" onclick="startMessageFromRequest(' . (int)$r['RequestID'] . ')">💬 Message Provider</button>';
         }
         
-        
-        // Completed requests: Book Again + Rate
+        // Completed requests: Book Again
         if ($type === 'completed') {
-            $html .= '
-                <button class="btn-success book-again-simple-btn" 
-                data-skill-id="' . (int)($r['SkillID'] ?? 0) . '"
-                data-provider="' . htmlspecialchars($r['FName'] . ' ' . $r['LName'], ENT_QUOTES, 'UTF-8') . '">
-                    📅 Book Again
-                </button>
-                ';
+            $html .= '<button class="btn-success book-again-simple-btn" data-skill-id="' . (int)($r['SkillID'] ?? 0) . '" data-provider="' . htmlspecialchars($r['FName'] . ' ' . $r['LName'], ENT_QUOTES, 'UTF-8') . '">📅 Book Again</button>';
         }
 
         // Cancelled requests: Book Again only
         if ($type === 'cancelled') {
-            $html .= '
-                <button class="btn-success book-again-simple-btn" 
-                data-skill-id="' . (int)($r['SkillID'] ?? 0) . '"
-                data-provider="' . htmlspecialchars($r['FName'] . ' ' . $r['LName'], ENT_QUOTES, 'UTF-8') . '">
-                    📅 Book Again
-                </button>';
+            $html .= '<button class="btn-success book-again-simple-btn" data-skill-id="' . (int)($r['SkillID'] ?? 0) . '" data-provider="' . htmlspecialchars($r['FName'] . ' ' . $r['LName'], ENT_QUOTES, 'UTF-8') . '">📅 Book Again</button>';
         }
         
         $html .= '
@@ -562,6 +556,7 @@ function renderRequestCards($requests, $type) {
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>Client Dashboard | SkillConnect</title>
   <link rel="stylesheet" href="styles/client.css" />
+  <link rel="stylesheet" href="styles/messaging.css">
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap" rel="stylesheet">
   <script src="js/vendor/chart.umd.min.js"></script>
   <link rel="stylesheet" href="styles/vendor/flatpickr.min.css">
@@ -576,6 +571,11 @@ function renderRequestCards($requests, $type) {
                 <a href="#" id="dashboardLink" class="active">Dashboard</a>
                     <a href="#" id="browseLink">Browse Services</a>
                     <a href="#" id="requestsLink">My Requests</a>
+
+                    <a href="#" id="messagesLink" style="position:relative;">
+                    💬 Messages
+                    <span class="message-badge" id="messageBadge" style="display:none;">0</span>
+                </a>
             </nav>
         <?php
         // Fetch full user data for profile
@@ -1252,6 +1252,74 @@ function renderRequestCards($requests, $type) {
     </div>
 </div>
 
+<!-- Messaging Modal -->
+<div id="messagingModal" class="modal messaging-modal" role="dialog" aria-hidden="true">
+  <div class="modal-content messaging-modal-content">
+    <div class="messaging-container">
+      
+      <!-- Sidebar -->
+      <div class="conversations-sidebar">
+        <div class="conversations-header">
+          <h3>💬 Messages</h3>
+          <button class="close-btn" onclick="closeModal('messagingModal')">&times;</button>
+        </div>
+        
+        <div id="conversationsList" class="conversations-list">
+          <div class="loading-state">
+            <div class="spinner"></div>
+            <p>Loading conversations...</p>
+          </div>
+        </div>
+      </div>
+      
+      <!-- Chat Window -->
+      <div class="chat-window">
+        <div id="chatPlaceholder" class="chat-placeholder active">
+          <div class="placeholder-content">
+            <svg width="80" height="80" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+              <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+            </svg>
+            <h3>Select a conversation</h3>
+            <p>Choose a conversation from the list to start messaging</p>
+          </div>
+        </div>
+        
+        <div id="chatContainer" class="chat-container">
+          <div class="chat-header">
+            <div class="chat-header-info">
+              <div class="contact-avatar"></div>
+              <div class="contact-details">
+                <h4 id="contactName">Loading...</h4>
+                <p id="contactService">Service details</p>
+              </div>
+            </div>
+          </div>
+          
+          <div id="messagesContainer" class="messages-container">
+            <!-- Messages will appear here -->
+          </div>
+          
+          <div class="chat-input-container">
+            <form id="messageForm" class="message-form">
+              <input 
+                type="text" 
+                id="messageInput" 
+                placeholder="Type your message..." 
+                autocomplete="off"
+                maxlength="1000"
+              />
+              <button type="submit" class="btn-send" disabled>
+                <span>Send</span>
+              </button>
+            </form>
+          </div>
+        </div>
+      </div>
+      
+    </div>
+  </div>
+</div>
+
 
 <script src="js/vendor/flatpickr.min.js"></script>
 <script src="js/vendor/chart.umd.min.js"></script>
@@ -1259,6 +1327,22 @@ function renderRequestCards($requests, $type) {
 <script src="js/browse.js"></script>
 <script src="js/requestFilters.js"></script>
 <script src="js/alerts.js"></script>
+<script type="module" src="js/messaging.js"></script>
+<script src="js/messaging-integration.js"></script>
+
+<script>
+// Open messaging modal
+document.addEventListener('DOMContentLoaded', () => {
+  const messagesLink = document.getElementById('messagesLink');
+  if (messagesLink) {
+    messagesLink.addEventListener('click', (e) => {
+      e.preventDefault();
+      openModal('messagingModal');
+      initMessaging();
+    });
+  }
+});
+</script>
 
 
 </body>
