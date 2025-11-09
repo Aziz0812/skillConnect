@@ -718,7 +718,7 @@ if ($stmt->execute()) {
 // -----------------------------
 $requests_query = "
     SELECT r.RequestID, r.Status, r.Schedule, COALESCE(c.CategoryName, s.CustomCategory) AS SkillName, 
-    u.FName, u.LName, u.Avatar, u.Barangay, u.City, u.Province
+    u.FName, u.LName, u.ProfilePhoto, u.Barangay, u.City, u.Province
     FROM request r
     JOIN skills s ON r.SkillID = s.SkillID
     LEFT JOIN skill_categories c ON s.CategoryID = c.CategoryID
@@ -1421,8 +1421,8 @@ if ($my_requests) {
 
                 <div class="card-body">
                 <div class="d-flex align-items-center mb-3">
-                    <?php if (!empty($r['Avatar'])): ?>
-                    <img src="<?php echo htmlspecialchars($r['Avatar']); ?>"
+                    <?php if (!empty($r['ProfilePhoto'])): ?>
+                    <img src="<?php echo htmlspecialchars($r['ProfilePhoto']); ?>"
                         alt="Avatar"
                         class="rounded-circle me-2"
                         style="width:40px;height:40px;object-fit:cover;">
@@ -1544,8 +1544,8 @@ if ($my_requests) {
 
                         <div class="card-body">
                         <div class="d-flex align-items-center mb-3">
-                            <?php if (!empty($r['Avatar'])): ?>
-                            <img src="<?php echo htmlspecialchars($r['Avatar']); ?>"
+                            <?php if (!empty($r['ProfilePhoto'])): ?>
+                            <img src="<?php echo htmlspecialchars($r['ProfilePhoto']); ?>"
                                 alt="Avatar"
                                 class="rounded-circle me-2"
                                 style="width:40px;height:40px;object-fit:cover;">
@@ -1629,8 +1629,8 @@ if ($my_requests) {
 
                         <div class="card-body">
                         <div class="d-flex align-items-center mb-3">
-                            <?php if (!empty($r['Avatar'])): ?>
-                            <img src="<?php echo htmlspecialchars($r['Avatar']); ?>"
+                            <?php if (!empty($r['ProfilePhoto'])): ?>
+                            <img src="<?php echo htmlspecialchars($r['ProfilePhoto']); ?>"
                                 alt="Avatar"
                                 class="rounded-circle me-2"
                                 style="width:40px;height:40px;object-fit:cover;">

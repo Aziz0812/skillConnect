@@ -1,12 +1,16 @@
-// ============================================
-// PROVIDER.JS - COMPLETE FIXED VERSION
-// ============================================
-
 document.addEventListener('DOMContentLoaded', () => {
-  console.log("✅ DOM fully loaded");
+  console.log("âœ… DOM fully loaded");
 
-  // ✅ Handle all skill-related redirects in ONE place
-  if (window.location.search.includes('skill_added=1') || 
+  // âœ… FIXED: Handle job updates FIRST (before skill checks)
+  if (window.location.search.includes('job_updated=1')) {
+    const hash = window.location.hash || '#jobs-section';
+    const cleanUrl = window.location.pathname + hash;
+    window.history.replaceState({}, '', cleanUrl);
+    localStorage.setItem('activeSection', 'jobs-section');
+    console.log("âœ… Job status updated - staying on jobs section");
+  }
+  // Then handle skill-related redirects
+  else if (window.location.search.includes('skill_added=1') || 
     window.location.search.includes('updated=1') ||
     window.location.search.includes('deleted=1')) {
     
@@ -14,16 +18,8 @@ document.addEventListener('DOMContentLoaded', () => {
     window.history.replaceState({}, '', cleanUrl);
     localStorage.setItem('activeSection', 'skills-section');
   }
-  
-  // Handle job status updates
-  if (window.location.search.includes('job_updated=1')) {
-    const hash = window.location.hash || '#jobs-section';
-    const cleanUrl = window.location.pathname + hash;
-    window.history.replaceState({}, '', cleanUrl);
-    localStorage.setItem('activeSection', 'jobs-section');
-  }
 
-  console.log('provider.js loaded ✅');
+  console.log('provider.js loaded âœ…');
 
   // ----------------------------
   // NAVIGATION & SECTION HANDLING
@@ -129,7 +125,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const custom = otherCategoryEl?.value?.trim();
         previewCategory.textContent = custom && custom.length ? custom : 'Other (Specify)';
       } else {
-        previewCategory.textContent = categorySelect.options[categorySelect.selectedIndex]?.text || '—';
+        previewCategory.textContent = categorySelect.options[categorySelect.selectedIndex]?.text || 'â€”';
       }
     }
 
@@ -149,7 +145,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
   const descInput = document.getElementById('description');
   descInput?.addEventListener('input', e => {
-    previewDescription.textContent = e.target.value || '—';
+    previewDescription.textContent = e.target.value || 'â€”';
     const counter = document.getElementById('descCounter');
     if (counter) counter.textContent = `${e.target.value.length}/500 characters`;
   });
@@ -231,11 +227,11 @@ document.addEventListener('DOMContentLoaded', () => {
 
       if (isNaN(rate) || rate <= 0) {
         ratePreview.textContent = 'Please enter a valid positive rate.';
-        previewRate.textContent = '₱0/hr';
+        previewRate.textContent = 'â‚±0/hr';
         ratePreview.style.color = 'red';
         previewRate.style.color = 'gray';
       } else {
-        const display = `₱${rate.toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}${unitLabel}`;
+        const display = `â‚±${rate.toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}${unitLabel}`;
         ratePreview.textContent = display;
         previewRate.textContent = display;
         ratePreview.style.color = 'green';
@@ -312,7 +308,7 @@ document.addEventListener('DOMContentLoaded', () => {
       if (target) {
         showSection(target);
         localStorage.setItem('activeSection', target.id);
-        console.log("✅ Loaded section from hash:", hash);
+        console.log("âœ… Loaded section from hash:", hash);
         return;
       }
     }
@@ -322,10 +318,10 @@ document.addEventListener('DOMContentLoaded', () => {
 
     if (saved) {
       showSection(saved);
-      console.log("ℹ️ Restored section from storage:", savedId);
+      console.log("â„¹ï¸ Restored section from storage:", savedId);
     } else if (dashboardSection) {
       showSection(dashboardSection);
-      console.log("➡️ Defaulted to dashboard");
+      console.log("âž¡ï¸ Defaulted to dashboard");
     }
   })();
 
@@ -336,7 +332,7 @@ document.addEventListener('DOMContentLoaded', () => {
     if (target) {
       showSection(target);
       localStorage.setItem('activeSection', target.id);
-      console.log("🔁 Hash changed to:", hash);
+      console.log("ðŸ” Hash changed to:", hash);
     }
   });
 
@@ -387,7 +383,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const container = list;
 
     if (!res.ok) {
-      container.innerHTML = `<div class="text-danger text-center">⚠ Failed to load availability.</div>`;
+      container.innerHTML = `<div class="text-danger text-center">âš  Failed to load availability.</div>`;
       return;
     }
 
@@ -545,21 +541,23 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
 
-  // ======================================================
-  //                CHART LOADING
-  // ======================================================
-  async function loadCharts() {
+// ======================================================
+//                CHART LOADING (FIXED VERSION)
+// ======================================================
+async function loadCharts() {
     console.log('Loading charts...');
 
+    // âœ… DESTROY EXISTING CHARTS FIRST
     if (window.requestsTimeChart) {
-      window.requestsTimeChart.destroy();
-      window.requestsTimeChart = null;
+        window.requestsTimeChart.destroy();
+        window.requestsTimeChart = null;
     }
     if (window.statusChart) {
-      window.statusChart.destroy();
-      window.statusChart = null;
+        window.statusChart.destroy();
+        window.statusChart = null;
     }
 
+    // --- Requests Over Time Chart ---
     const timeRes = await fetchJSON(`${base}&action=requests_over_time`);
     const timeCtx = document.getElementById('requestsOverTimeChart')?.getContext('2d');
 
@@ -570,6 +568,7 @@ document.addEventListener('DOMContentLoaded', () => {
       if (labels.length === 0) {
         timeCtx.canvas.parentElement.innerHTML += '<div class="text-muted text-center mt-2">No request data over time.</div>';
       } else {
+        // âœ… Store chart in global variable
         window.requestsTimeChart = new Chart(timeCtx, {
           type: 'line',
           data: {
@@ -598,6 +597,7 @@ document.addEventListener('DOMContentLoaded', () => {
       }
     }
 
+    // --- Status Summary Chart ---
     const statusRes = await fetchJSON(`${base}&action=status_summary`);
     const statusCtx = document.getElementById('statusSummaryChart')?.getContext('2d');
 
@@ -609,6 +609,7 @@ document.addEventListener('DOMContentLoaded', () => {
       if (total === 0) {
         statusCtx.canvas.parentElement.innerHTML += '<div class="text-muted text-center mt-2">No request status data.</div>';
       } else {
+        // âœ… Store chart in global variable
         window.statusChart = new Chart(statusCtx, {
           type: 'pie',
           data: {
@@ -630,6 +631,7 @@ document.addEventListener('DOMContentLoaded', () => {
       }
     }
    
+    // --- Top Skills Container ---
     const topSkillsContainer = document.getElementById('topSkillsContainer');
     if (topSkillsContainer) {
       const topRes = await fetchJSON(`${base}&action=top_skills`);
@@ -650,8 +652,7 @@ document.addEventListener('DOMContentLoaded', () => {
         `;
       }
     }
-  }
-
+}
   // ======================================================
   //            SEARCH & FILTER LOGIC
   // ======================================================
@@ -680,6 +681,7 @@ document.addEventListener('DOMContentLoaded', () => {
     new bootstrap.Toast(toastEl, { delay: 4000 }).show();
   });
 
+  // Automatically show messages passed from PHP
   if (window.success_message) showToast(window.success_message, 'success');
   if (window.error_message) showToast(window.error_message, 'danger');
 
@@ -711,8 +713,8 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
 
-  // ============================================
-  // PROFILE TAB SWITCHING
+// ============================================
+  // PROFILE TAB SWITCHING (INSIDE EXISTING DOMContentLoaded)
   // ============================================
   document.querySelectorAll('.profile-tab').forEach(tab => {
     tab.addEventListener('click', function() {
@@ -750,7 +752,7 @@ document.addEventListener('DOMContentLoaded', () => {
       const btn = e.target.querySelector('.btn-primary');
       const originalText = btn.innerHTML;
       btn.disabled = true;
-      btn.innerHTML = '⏳ Saving...';
+      btn.innerHTML = 'â³ Saving...';
       
       try {
         const res = await fetch('update_profile_provider.php', { method: 'POST', body: formData });
@@ -800,7 +802,7 @@ document.addEventListener('DOMContentLoaded', () => {
       const btn = e.target.querySelector('.btn-primary');
       const originalText = btn.innerHTML;
       btn.disabled = true;
-      btn.innerHTML = '⏳ Saving...';
+      btn.innerHTML = 'â³ Saving...';
       
       try {
         const res = await fetch('update_profile_provider.php', { method: 'POST', body: formData });
@@ -841,7 +843,7 @@ document.addEventListener('DOMContentLoaded', () => {
       const btn = e.target.querySelector('.btn-primary');
       const originalText = btn.innerHTML;
       btn.disabled = true;
-      btn.innerHTML = '⏳ Changing...';
+      btn.innerHTML = 'â³ Changing...';
       
       try {
         const res = await fetch('update_profile_provider.php', { method: 'POST', body: formData });
@@ -861,18 +863,18 @@ document.addEventListener('DOMContentLoaded', () => {
       }
     });
   }
-
-}); // ← END OF DOMContentLoaded
+  
+}); // â† END OF DOMContentLoaded
 
 
 // ============================================
-// GLOBAL FUNCTIONS (OUTSIDE DOMContentLoaded)
+// GLOBAL HELPER FUNCTIONS (OUTSIDE DOMContentLoaded)
 // ============================================
 
 function showToast(message, type = 'success') {
   const toastArea = document.getElementById('toast-area');
   if (!toastArea) {
-    console.log('📢 Toast:', message);
+    console.log('ðŸ“¢ Toast:', message);
     return;
   }
 
@@ -896,34 +898,36 @@ function showToast(message, type = 'success') {
 // MODAL FUNCTIONS - GLOBAL SCOPE
 // ============================================
 window.openModal = function(modalId) {
-  console.log('🔓 Opening modal:', modalId);
+  console.log('ðŸ”“ Opening modal:', modalId);
   const modal = document.getElementById(modalId);
   
   if (!modal) {
-    console.error('❌ Modal not found:', modalId);
+    console.error('âŒ Modal not found:', modalId);
     return;
   }
   
   modal.style.display = 'flex';
-  document.body.style.overflow = 'hidden';
+  modal.offsetHeight;
   
   requestAnimationFrame(() => {
     modal.classList.add('show');
+    document.body.style.overflow = 'hidden';
     
+    // Load data AFTER modal is visible
     if (modalId === 'profileModal') {
-      console.log('📝 Loading profile data...');
+      console.log('ðŸ“ Loading profile...');
       setTimeout(() => loadProfileData(), 100);
     }
     
     if (modalId === 'photoModal') {
-      console.log('📷 Initializing photo upload...');
+      console.log('ðŸ“· Initializing photo...');
       setTimeout(() => initPhotoPreview(), 100);
     }
   });
 };
 
 window.closeModal = function(modalId) {
-  console.log('🔒 Closing modal:', modalId);
+  console.log('ðŸ”’ Closing modal:', modalId);
   const modal = document.getElementById(modalId);
   if (!modal) return;
   
@@ -938,49 +942,39 @@ window.closeModal = function(modalId) {
 // PROFILE DATA LOADING
 // ============================================
 async function loadProfileData() {
-  console.log('📡 Fetching profile data from server...');
-  
   try {
-    const res = await fetch('update_profile_provider.php?action=get_profile', { 
-      method: 'POST',
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded' }
-    });
-    
+    console.log('ðŸ”„ Fetching profile data...');
+    const res = await fetch('update_profile_provider.php?action=get_profile', { method: 'POST' });
     const data = await res.json();
-    console.log('📦 Profile data received:', data);
+    
+    console.log('ðŸ“¦ Profile data:', data);
     
     if (data.success) {
       const user = data.data;
       const fields = {
-        fname: user.FName || '',
-        lname: user.LName || '',
-        mname: user.MName || '',
-        phone: user.Phone || '',
-        dob: user.DateOfBirth || '',
-        bio: user.Bio || '',
-        location: user.Location || '',
-        city: user.City || '',
-        province: user.Province || '',
-        barangay: user.Barangay || ''
+        fname: user.FName,
+        lname: user.LName,
+        mname: user.MName,
+        phone: user.Phone,
+        dob: user.DateOfBirth,
+        bio: user.Bio,
+        location: user.Location,
+        city: user.City,
+        province: user.Province,
+        barangay: user.Barangay
       };
       
       Object.entries(fields).forEach(([id, value]) => {
         const el = document.getElementById(id);
-        if (el) {
-          el.value = value;
-          console.log(`✅ Set ${id}:`, value);
-        } else {
-          console.warn(`⚠️ Field not found: ${id}`);
-        }
+        if (el) el.value = value || '';
       });
       
-      console.log('✅ Profile data loaded successfully');
+      console.log('âœ… Profile data loaded');
     } else {
-      console.error('❌ Server error:', data.message);
-      showToast(data.message || 'Failed to load profile', 'danger');
+      showToast('Failed to load profile', 'danger');
     }
   } catch (err) {
-    console.error('❌ Network error loading profile:', err);
+    console.error('âŒ Error loading profile:', err);
     showToast('Error loading profile', 'danger');
   }
 }
@@ -989,183 +983,117 @@ async function loadProfileData() {
 // PHOTO UPLOAD FUNCTIONALITY
 // ============================================
 function initPhotoPreview() {
-  console.log('📸 Initializing photo preview...');
-  
   const preview = document.getElementById('photoPreview');
   const input = document.getElementById('photoInput');
   const uploadBtn = document.getElementById('uploadPhotoBtn');
   const removeBtn = document.getElementById('removePhotoBtn');
   
   if (!preview || !input || !uploadBtn || !removeBtn) {
-    console.error('❌ Photo modal elements not found:', {
-      preview: !!preview,
-      input: !!input,
-      uploadBtn: !!uploadBtn,
-      removeBtn: !!removeBtn
-    });
+    console.error('âŒ Photo modal elements not found');
     return;
   }
   
-  console.log('✅ Photo elements found, setting up listeners...');
+  console.log('âœ… Photo preview initialized');
   
-  // Click to upload
-  preview.onclick = () => {
-    console.log('📁 Opening file picker...');
-    input.click();
-  };
+  preview.addEventListener('click', () => input.click());
   
-  // Drag & drop
-  preview.ondragover = (e) => {
+  preview.addEventListener('dragover', (e) => {
     e.preventDefault();
     preview.style.borderColor = '#667eea';
-  };
+  });
   
-  preview.ondragleave = () => {
+  preview.addEventListener('dragleave', () => {
     preview.style.borderColor = '#e9ecef';
-  };
+  });
   
-  preview.ondrop = (e) => {
+  preview.addEventListener('drop', (e) => {
     e.preventDefault();
     preview.style.borderColor = '#e9ecef';
     if (e.dataTransfer.files[0]) {
-      console.log('📥 File dropped:', e.dataTransfer.files[0].name);
       handlePhotoFile(e.dataTransfer.files[0]);
     }
-  };
+  });
   
-  // File input change
-  input.onchange = () => {
-    console.log('📁 File selected:', input.files[0]?.name);
+  input.addEventListener('change', () => {
     if (input.files[0]) {
       handlePhotoFile(input.files[0]);
     }
-  };
+  });
   
-  // Handle photo file
   function handlePhotoFile(file) {
-    console.log('🔍 Validating file:', file.name, file.type, `${(file.size/1024/1024).toFixed(2)}MB`);
-    
     const allowedTypes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
     
     if (!allowedTypes.includes(file.type)) {
-      console.error('❌ Invalid file type:', file.type);
       showToast('Invalid file type. Use JPG, PNG, GIF, or WebP', 'danger');
       return;
     }
     
     if (file.size > 5 * 1024 * 1024) {
-      console.error('❌ File too large:', file.size);
       showToast('File too large. Maximum 5MB', 'danger');
       return;
     }
-    
-    console.log('✅ File valid, creating preview...');
     
     const reader = new FileReader();
     reader.onload = (e) => {
       preview.innerHTML = `<img src="${e.target.result}" alt="Preview" style="width:100%;height:100%;object-fit:cover;border-radius:12px;">`;
       uploadBtn.disabled = false;
-      console.log('✅ Preview created, upload button enabled');
     };
     reader.readAsDataURL(file);
   }
   
-  // Upload button
-  uploadBtn.onclick = async () => {
-    if (!input.files[0]) {
-      console.warn('⚠️ No file selected');
-      return;
-    }
-    
-    console.log('📤 Uploading photo...');
+  uploadBtn.addEventListener('click', async () => {
+    if (!input.files[0]) return;
     
     const formData = new FormData();
     formData.append('action', 'upload_photo');
     formData.append('photo', input.files[0]);
     
     uploadBtn.disabled = true;
-    uploadBtn.innerHTML = '⏳ Uploading...';
+    uploadBtn.innerHTML = 'â³ Uploading...';
     
     try {
-      const res = await fetch('update_profile_provider.php', { 
-        method: 'POST', 
-        body: formData 
-      });
-      
+      const res = await fetch('update_profile_provider.php', { method: 'POST', body: formData });
       const data = await res.json();
-      console.log('📦 Upload response:', data);
       
       if (data.success) {
-        console.log('✅ Upload successful:', data.photo_url);
         showToast(data.message, 'success');
         closeModal('photoModal');
         setTimeout(() => location.reload(), 1000);
       } else {
-        console.error('❌ Upload failed:', data.message);
         showToast(data.message, 'danger');
       }
     } catch (err) {
-      console.error('❌ Network error during upload:', err);
+      console.error('Upload error:', err);
       showToast('Error uploading photo', 'danger');
     } finally {
       uploadBtn.disabled = false;
       uploadBtn.innerHTML = 'Upload';
     }
-  };
+  });
   
-  // Remove button
-  removeBtn.onclick = async () => {
+  removeBtn.addEventListener('click', async () => {
     if (!confirm('Remove your profile photo?')) return;
     
-    console.log('🗑️ Removing photo...');
-    
     removeBtn.disabled = true;
-    removeBtn.innerHTML = '⏳ Removing...';
+    removeBtn.innerHTML = 'â³ Removing...';
     
     try {
-      const res = await fetch('update_profile_provider.php?action=remove_photo', { 
-        method: 'POST' 
-      });
-      
+      const res = await fetch('update_profile_provider.php?action=remove_photo', { method: 'POST' });
       const data = await res.json();
-      console.log('📦 Remove response:', data);
       
       if (data.success) {
-        console.log('✅ Photo removed');
         showToast(data.message, 'success');
         closeModal('photoModal');
         setTimeout(() => location.reload(), 1000);
       } else {
-        console.error('❌ Remove failed:', data.message);
         showToast(data.message, 'danger');
       }
     } catch (err) {
-      console.error('❌ Network error during removal:', err);
+      console.error('Remove error:', err);
       showToast('Error removing photo', 'danger');
     } finally {
       removeBtn.disabled = false;
       removeBtn.innerHTML = 'Remove Photo';
     }
-  };
-  
-  console.log('✅ Photo preview fully initialized');
+  });
 }
-
-// ============================================
-// CLOSE MODALS ON ESC AND OUTSIDE CLICK
-// ============================================
-document.addEventListener('keydown', (e) => {
-  if (e.key === 'Escape') {
-    document.querySelectorAll('.modal.show').forEach(modal => {
-      closeModal(modal.id);
-    });
-  }
-});
-
-document.addEventListener('click', (e) => {
-  if (e.target.classList.contains('modal') && e.target.classList.contains('show')) {
-    closeModal(e.target.id);
-  }
-});
-
-console.log('✅ Provider.js fully loaded and ready');
