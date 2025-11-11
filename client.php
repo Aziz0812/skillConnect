@@ -118,7 +118,7 @@ if (!isset($_GET['ajax']) || $_GET['ajax'] !== '1') {
                     FROM skills s
                     JOIN users u ON s.UserID = u.ID
                     LEFT JOIN skill_categories sc ON s.CategoryID = sc.CategoryID
-                    WHERE u.Role = 'provider' AND s.IsActive = 1
+                    WHERE u.Role = 'provider' AND s.IsActive = 1 AND s.ApprovalStatus = 'approved'
                 ";
 
                 // 🔍 Search text across name, skill, location
@@ -356,7 +356,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['book_skill_id'])) {
             FROM skills s
             JOIN users u ON s.UserID = u.ID
             LEFT JOIN skill_categories sc ON s.CategoryID = sc.CategoryID
-            WHERE u.Role = 'provider'
+            WHERE u.Role = 'provider' AND s.ApprovalStatus = 'approved'
             ORDER BY SkillName, u.FName
             LIMIT 100
         ";
@@ -527,7 +527,7 @@ function renderRequestCards($requests, $type) {
             if ($canCancel) {
                 $html .= '<button class="btn-secondary cancel-request-btn" data-request-id="' . (int)$r['RequestID'] . '">Cancel Request</button>';
             }
-            $html .= '<button class="btn-primary" onclick="startMessageFromRequest(' . (int)$r['RequestID'] . ')">💬 Message Provider</button>';
+            $html .= '<button class="btn-primary" onclick="startMessageFromRequest(' . (int)$r['RequestID'] . ')"> Message Provider</button>';
         }
         
         // Completed requests: Book Again
@@ -568,12 +568,12 @@ function renderRequestCards($requests, $type) {
         <header class="top-nav">
             <div class="logo"><img src="imge/logo-.png" alt="">SkillConnect</div>
             <nav class="nav-links">
-                <a href="#" id="dashboardLink" class="active">Dashboard</a>
-                    <a href="#" id="browseLink">Browse Services</a>
-                    <a href="#" id="requestsLink">My Requests</a>
+                <a href="#" id="dashboardLink" class="active"><span>Dashboard</span></a>
+                <a href="#" id="browseLink"><span>Browse Services</span></a>
+                <a href="#" id="requestsLink"><span>My Requests</span></a>
 
                     <a href="#" id="messagesLink" style="position:relative;">
-                    💬 Messages
+                     Messages
                     <span class="message-badge" id="messageBadge" style="display:none;">0</span>
                 </a>
             </nav>
@@ -728,29 +728,73 @@ function renderRequestCards($requests, $type) {
                 </div>
                 <div class="activity-feed">
                     <?php
+                    // ✅ Get all requests and manually determine latest activity
                     $activity_query = "
-                        SELECT r.Status, r.CreatedAt, r.Schedule,
-                               COALESCE(sc.CategoryName, s.CustomCategory, 'Service') AS SkillName,
-                               u.FName, u.LName
+                        SELECT 
+                            r.requestID,
+                            r.Status, 
+                            r.CreatedAt,
+                            r.ConfirmedAt,
+                            r.Schedule,
+                            COALESCE(sc.CategoryName, s.CustomCategory, 'Service') AS SkillName,
+                            u.FName, 
+                            u.LName
                         FROM request r
                         JOIN skills s ON r.SkillID = s.SkillID
                         JOIN users u ON r.ProviderID = u.ID
                         LEFT JOIN skill_categories sc ON s.CategoryID = sc.CategoryID
                         WHERE r.ClientID = ?
                         ORDER BY r.CreatedAt DESC
-                        LIMIT 5
+                        LIMIT 20
                     ";
                     $stmt = $conn->prepare($activity_query);
                     $stmt->bind_param("i", $client_id);
                     $stmt->execute();
-                    $activities = $stmt->get_result();
+                    $all_activities = $stmt->get_result();
                     
-                    if ($activities->num_rows > 0):
-                        while($act = $activities->fetch_assoc()):
-                            $timeAgo = time() - strtotime($act['CreatedAt']);
-                            $timeText = $timeAgo < 3600 ? floor($timeAgo/60).' min ago' : 
-                                       ($timeAgo < 86400 ? floor($timeAgo/3600).' hours ago' : 
-                                       floor($timeAgo/86400).' days ago');
+                    // Build array with estimated activity times
+                    $activities_with_time = [];
+                    while($act = $all_activities->fetch_assoc()) {
+                        // Estimate activity time based on status
+                        if ($act['Status'] === 'Confirmed' && !empty($act['ConfirmedAt'])) {
+                            $act['ActivityTime'] = $act['ConfirmedAt'];
+                        } else {
+                            // For cancelled/completed, use CreatedAt as fallback
+                            // In reality, this just happened, so show as recent
+                            $act['ActivityTime'] = $act['CreatedAt'];
+                        }
+                        $activities_with_time[] = $act;
+                    }
+                    
+                    // Sort by activity time
+                    usort($activities_with_time, function($a, $b) {
+                        return strtotime($b['ActivityTime']) - strtotime($a['ActivityTime']);
+                    });
+                    
+                    // Take top 5
+                    $activities_with_time = array_slice($activities_with_time, 0, 5);
+                    
+                    if (count($activities_with_time) > 0):
+                        foreach($activities_with_time as $act):
+                            $activityTime = strtotime($act['ActivityTime']);
+                            $currentTime = time();
+                            $timeAgo = $currentTime - $activityTime;
+                            
+                            // Format time ago
+                            if ($timeAgo < 60) {
+                                $timeText = 'Just now';
+                            } elseif ($timeAgo < 3600) {
+                                $minutes = floor($timeAgo / 60);
+                                $timeText = $minutes . ' min' . ($minutes > 1 ? 's' : '') . ' ago';
+                            } elseif ($timeAgo < 86400) {
+                                $hours = floor($timeAgo / 3600);
+                                $timeText = $hours . ' hour' . ($hours > 1 ? 's' : '') . ' ago';
+                            } elseif ($timeAgo < 604800) {
+                                $days = floor($timeAgo / 86400);
+                                $timeText = $days . ' day' . ($days > 1 ? 's' : '') . ' ago';
+                            } else {
+                                $timeText = date('M j, Y', $activityTime);
+                            }
                             
                             $icon = match(strtolower($act['Status'])) {
                                 'pending' => '⏳',
@@ -772,7 +816,7 @@ function renderRequestCards($requests, $type) {
                             </div>
                         </div>
                     <?php 
-                        endwhile;
+                        endforeach;
                     else:
                     ?>
                         <div class="empty-state-mini">
@@ -782,7 +826,6 @@ function renderRequestCards($requests, $type) {
                     <?php endif; ?>
                 </div>
             </div>
-
             <!-- Upcoming Appointments -->
             <div class="card">
                 <div class="card-header">

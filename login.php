@@ -43,15 +43,20 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
     } elseif (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
         $message = "Invalid email format.";
     } else {
-        $stmt = $conn->prepare("SELECT ID, Password, Role, FName, LName FROM users WHERE GMail = ?");
+        $stmt = $conn->prepare("SELECT ID, Password, Role, FName, LName, AccountStatus FROM users WHERE GMail = ?");
         $stmt->bind_param("s", $email);
         $stmt->execute();
         $result = $stmt->get_result();
 
-        if ($row = $result->fetch_assoc()) {
-            if (password_verify($password, $row['Password'])) {
+       if ($row = $result->fetch_assoc()) {
+        // ✅ CHECK ACCOUNT STATUS BEFORE PASSWORD
+            if (isset($row['AccountStatus']) && $row['AccountStatus'] === 'suspended') {
+                $message = "⚠️ Your account has been suspended. Please contact <strong>admin@skillconnect.com</strong> for reactivation.";
+            } elseif (isset($row['AccountStatus']) && $row['AccountStatus'] === 'banned') {
+                $message = "🚫 Your account has been permanently banned. Contact <strong>admin@skillconnect.com</strong> if you believe this is an error.";
+            } elseif (password_verify($password, $row['Password'])) {
                 // ✅ PASSWORD CORRECT → LOGIN IMMEDIATELY (NO OTP)
-                $_SESSION['user_id'] = $row['ID'];
+                 $_SESSION['user_id'] = $row['ID'];
                 $_SESSION['role']    = $row['Role'];
                 $_SESSION['FName']   = $row['FName'];
                 $_SESSION['LName']   = $row['LName'];
@@ -68,7 +73,7 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
                     setcookie("remember_token", $token, $expiry, "/", "", false, true);
                 }
 
-                // Redirect to dashboard
+                // Redirect to dashboardif ($row = $result->fetch_assoc()) {
                 header("Location: " . ($row['Role'] === 'provider' ? 'provider.php' : 'client.php'));
                 exit;
             } else {

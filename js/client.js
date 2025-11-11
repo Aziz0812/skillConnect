@@ -161,32 +161,9 @@ function initializeDatePickers() {
             }
             
             if (hint) {
-              const byDay = order.map(day => ({ day, slots: cachedAvailability.filter(s => s.DayOfWeek === day) }));
-              const working = byDay.filter(d => d.slots.length > 0);
-              
-              if (working.length > 0) {
-                // Create clean, organized availability display
-                hint.innerHTML = '<div class="availability-display">' +
-                  '<div class="availability-header">📅 Available Hours</div>' +
-                  '<div class="availability-grid">' +
-                  working.map(d => {
-                    const dayShort = d.day.substring(0, 3);
-                    const timeSlots = d.slots.map(s => 
-                      `${formatTime12hr(s.StartTime.substring(0,5))} - ${formatTime12hr(s.EndTime.substring(0,5))}`
-                    ).join('<br>');
-                    return `<div class="availability-day-slot">
-                      <span class="day-name">${dayShort}</span>
-                      <span class="time-slots">${timeSlots}</span>
-                    </div>`;
-                  }).join('') +
-                  '</div>' +
-                  '</div>';
-              } else {
-                hint.textContent = 'Availability not provided';
-              }
+              hint.textContent = 'Select a date to check availability';
               hint.style.color = '#6c757d';
-              hint.classList.remove('error');
-            }
+          }
             
             if (pills) {
               pills.innerHTML = order

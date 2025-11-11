@@ -370,71 +370,69 @@ if (isset($_COOKIE['remember_token'])) {
         }
 
 
-        // -----------------------------
-        // ADD NEW SKILL
-        // -----------------------------
-        if (isset($_POST['add_skill'])) {
-            $return_to = isset($_POST['return_to']) && !empty($_POST['return_to'])
-            ? $_POST['return_to']
-            : 'provider.php#skills-section';
+      // -----------------------------
+// ADD NEW SKILL
+// -----------------------------
+if (isset($_POST['add_skill'])) {
+    $return_to = isset($_POST['return_to']) && !empty($_POST['return_to'])
+    ? $_POST['return_to']
+    : 'provider.php#skills-section';
 
-            $category_id = isset($_POST['category_id']) && $_POST['category_id'] !== 'others' ? intval($_POST['category_id']) : 0;
-            $custom_category = trim($_POST['custom_category'] ?? '');
-            $description = trim($_POST['description'] ?? '');
-            $rate = isset($_POST['rate']) ? floatval($_POST['rate']) : 0;
-            $rate_type = $_POST['rate_type'] ?? 'hourly';
-            
+    $category_id = isset($_POST['category_id']) && $_POST['category_id'] !== 'others' ? intval($_POST['category_id']) : 0;
+    $custom_category = trim($_POST['custom_category'] ?? '');
+    $description = trim($_POST['description'] ?? '');
+    $rate = isset($_POST['rate']) ? floatval($_POST['rate']) : 0;
+    $rate_type = $_POST['rate_type'] ?? 'hourly';
+    
+    if ($_POST['category_id'] === 'others' && !empty($custom_category)) {
+        // ✅ FIXED: Insert with pending approval status
+        $stmt = $conn->prepare("
+            INSERT INTO skills (UserID, CustomCategory, Description, Rate, RateType, ApprovalStatus)
+            VALUES (?, ?, ?, ?, ?, 'pending')
+        ");
+        $stmt->bind_param("issds", $provider_id, $custom_category, $description, $rate, $rate_type);
 
+        if ($stmt->execute()) {
+            $stmt->close();
+            $redirectUrl = add_query_before_hash($return_to, 'skill_added');
+            redirect_with_message('success', 'Skill submitted for admin approval!', $redirectUrl);
+        } else {
+            $err = $conn->error;
+            if ($stmt) $stmt->close();
+            redirect_with_message('error', "Error adding custom skill: $err", $return_to);
+        }
+    } elseif ($category_id > 0 && !empty($description) && $rate > 0) {
+        // Check for duplicates
+        $check_stmt = $conn->prepare("SELECT SkillID FROM skills WHERE UserID = ? AND CategoryID = ? AND CustomCategory IS NULL");
+        $check_stmt->bind_param("ii", $provider_id, $category_id);
+        $check_stmt->execute();
+        $check_result = $check_stmt->get_result();
 
-           if ($_POST['category_id'] === 'others' && !empty($custom_category)) {
-            // User selected "Other (Specify)" — insert with NULL CategoryID
-            $stmt = $conn->prepare("
-                INSERT INTO skills (UserID, CustomCategory, Description, Rate, RateType)
-                VALUES (?, ?, ?, ?, ?)
-            ");
-            $stmt->bind_param("issds", $provider_id, $custom_category, $description, $rate, $rate_type);
-
+        if ($check_result->num_rows > 0) {
+            $check_stmt->close();
+            redirect_with_message('error', 'You already posted this skill category.', $return_to);
+        } else {
+            // ✅ FIXED: Insert with pending approval status
+            $stmt = $conn->prepare("INSERT INTO skills (UserID, CategoryID, Description, Rate, RateType, ApprovalStatus) VALUES (?, ?, ?, ?, ?, 'pending')");
+            $stmt->bind_param("iisds", $provider_id, $category_id, $description, $rate, $rate_type);
 
             if ($stmt->execute()) {
                 $stmt->close();
+                $check_stmt->close();
                 $redirectUrl = add_query_before_hash($return_to, 'skill_added');
-                redirect_with_message('success', 'Skill added successfully!', $redirectUrl);
+                redirect_with_message('success', 'Skill submitted for admin approval!', $redirectUrl);
             } else {
                 $err = $conn->error;
                 if ($stmt) $stmt->close();
-                redirect_with_message('error', "Error adding custom skill: $err", $return_to);
+                if ($check_stmt) $check_stmt->close();
+                redirect_with_message('error', "Error adding skill: $err", $return_to);
             }
-            } elseif ($category_id > 0 && !empty($description) && $rate > 0) {
-                // Add standard skill
-                $check_stmt = $conn->prepare("SELECT SkillID FROM skills WHERE UserID = ? AND CategoryID = ? AND CustomCategory IS NULL");
-                $check_stmt->bind_param("ii", $provider_id, $category_id);
-                $check_stmt->execute();
-                $check_result = $check_stmt->get_result();
-
-                if ($check_result->num_rows > 0) {
-                    $check_stmt->close();
-                    redirect_with_message('error', 'You already posted this skill category.', $return_to);
-                } else {
-                        $stmt = $conn->prepare("INSERT INTO skills (UserID, CategoryID, Description, Rate, RateType) VALUES (?, ?, ?, ?, ?)");
-                        $stmt->bind_param("iisds", $provider_id, $category_id, $description, $rate, $rate_type);
-
-                    if ($stmt->execute()) {
-                        $stmt->close();
-                        $check_stmt->close();
-                        $redirectUrl = add_query_before_hash($return_to, 'skill_added');
-                        redirect_with_message('success', 'Custom skill added successfully!', $redirectUrl);
-                    } else {
-                        $err = $conn->error;
-                        if ($stmt) $stmt->close();
-                        if ($check_stmt) $check_stmt->close();
-                        redirect_with_message('error', "Error adding skill: $err", $return_to);
-                    }
-                }
+        }
     } else {
         // missing fields
         redirect_with_message('error', 'Please select a category and fill all fields.', $return_to);
     }
-}
+} // ← ✅ THIS WAS MISSING!
 
 // -----------------------------
 // UPDATE SKILL (with change detection)

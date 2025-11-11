@@ -227,11 +227,11 @@ document.addEventListener('DOMContentLoaded', () => {
 
       if (isNaN(rate) || rate <= 0) {
         ratePreview.textContent = 'Please enter a valid positive rate.';
-        previewRate.textContent = 'â‚±0/hr';
+        previewRate.textContent = '₱0/hr';
         ratePreview.style.color = 'red';
         previewRate.style.color = 'gray';
       } else {
-        const display = `â‚±${rate.toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}${unitLabel}`;
+        const display = `₱${rate.toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}${unitLabel}`;
         ratePreview.textContent = display;
         previewRate.textContent = display;
         ratePreview.style.color = 'green';
@@ -393,7 +393,7 @@ document.addEventListener('DOMContentLoaded', () => {
         <div class="text-muted text-center py-3">
           <i class="bi bi-calendar-x fs-3 d-block mb-2"></i>
           No availability set yet.<br>
-          <small>Add your working days and hours above.</small>
+          <small>Add your working days and hours from below.</small>
         </div>`;
       return;
     }
